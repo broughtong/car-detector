@@ -10,6 +10,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 datasetPath = "../data/extracted/"
+outputPath = "../data/results/simple/"
+visualisationPath = "../visualisation/simple/"
 WIDTH = 1.5
 LENGTH = 2.5
 DIAGONAL = 3.1
@@ -45,11 +47,14 @@ class Annotator(multiprocessing.Process):
             self.detections.append(cars)
             self.relaxed.append(cars_rel)
             self.fileCounter += 1
+            break
         
         self.data["annotations"] = self.detections
         self.data["annotations_rel"] = self.relaxed
-        os.makedirs("./result/detected_rel/", exist_ok=True)
-        with open(os.path.join("result", "detected_rel", self.filename), "wb") as f:
+        os.makedirs(outputPath, exist_ok=True)
+        fn = os.path.join(outputPath, self.filename)
+        with open(fn, "wb") as f:
+            print("Writing to ", fn)
             pickle.dump(self.data, f, protocol=2)
 
         print("Process finished for file %s" % (self.filename))
@@ -67,8 +72,8 @@ class Annotator(multiprocessing.Process):
 
         points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"]])
         middle_points = np.array(scan["sick_back_middle"])
-        cars = self.detect_car_geometric(points, middle_points, min_wheels=4, False, False)
-        cars_relaxed = self.detect_car_geometric(points, middle_points, min_wheels=3, False, False)
+        cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=False, use_bumper=False)
+        cars_relaxed = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=False, use_bumper=False)
 
         wheels = []
         colours = []
@@ -76,7 +81,7 @@ class Annotator(multiprocessing.Process):
             wheels.append([i[0], i[1]])
             colours.append([0, 255, 255])
     
-        #self.pointsToImgsDrawWheels(points, "car-estimates", wheels, colours)
+        self.pointsToImgsDrawWheels(points, "car-estimates", wheels, colours)
 
         return cars, cars_relaxed
 
@@ -304,110 +309,6 @@ class Annotator(multiprocessing.Process):
             self.pointsToImgsDrawWheels(np.concatenate([points, middle_points]), "clusters-j-c", np.concatenate([cluster_centers[:, :2], wheels]), cols)
         return cars
 
-    def detectCarGeometry_old(self, points):
-
-        pc = np.array(points)
-        pc = pc[:,:2]
-        clustering = DBSCAN(eps=0.35, min_samples=3).fit(pc)
-        l = set(clustering.labels_)
-        l.remove(-1)
-
-        centroids = {}
-        centres = []
-        colours = []
-        for clusterID in l:
-            n = 0
-            x = 0
-            y = 0
-            for i in range(len(pc)):
-                if clustering.labels_[i] == clusterID:
-                    n += 1
-                    x += pc[i][0]
-                    y += pc[i][1]
-            x /= n
-            y /= n
-            centroids[clusterID] = [x, y]
-            centres.append([x, y])
-            colours.append([0, 0, 255])
-
-        self.pointsToImgsDrawWheels(pc, "wheels", centres, colours)
-
-        #usedClusters = []
-        carClusters = []
-        for clusterID, position in centroids.items():
-
-            #if clusterID in usedClusters:
-            #    continue
-
-            for otherClusterID, otherPosition in centroids.items():
-
-                if clusterID == otherClusterID:
-                    continue
-                #if otherClusterID in usedClusters:
-                #    continue
-
-                dx = position[0] - otherPosition[0]
-                dy = position[1] - otherPosition[1]
-                dist = ((dx**2)+(dy**2))**0.5
-
-                width = 1.5
-                tolerance = 0.23
-
-                if abs(dist - width) < tolerance:
-
-                    length = 2.6
-                    tolerance = 0.3
-
-                    thirdA = [((-dy/dist)*length) + position[0], ((dx/dist)*length) + position[1]]
-                    thirdB = [((dy/dist)*length) + position[0], ((-dx/dist)*length) + position[1]]
-
-                    for thirdClusterID, thirdPosition in centroids.items():
-
-                        if thirdClusterID == clusterID or thirdClusterID == otherClusterID:
-                            continue
-                        #if thirdClusterID in usedClusters:
-                        #    continue
-
-                        diffX = thirdA[0] - thirdPosition[0]
-                        diffY = thirdA[1] - thirdPosition[1]
-                        distance = ((diffX**2)+(diffY**2))**0.5
-
-                        if abs(distance - length) < tolerance:
-                            #usedClusters.append(clusterID)
-                            #usedClusters.append(otherClusterID)
-                            #usedClusters.append(thirdClusterID)
-                            carClusters.append([clusterID, otherClusterID, thirdClusterID])
-
-                            centres.append([thirdA[0], thirdA[1]])
-                            colours.append([255, 255, 0])
-                            break
-                        else:
-
-                            diffX = thirdB[0] - thirdPosition[0]
-                            diffY = thirdB[1] - thirdPosition[1]
-                            distance = ((diffX**2)+(diffY**2))**0.5
-
-                            if abs(distance - length) < tolerance:
-                                #usedClusters.append(clusterID)
-                                #usedClusters.append(otherClusterID)
-                                #usedClusters.append(thirdClusterID)
-                                carClusters.append([clusterID, otherClusterID, thirdClusterID])
-                                centres.append([thirdB[0], thirdB[1]])
-                                colours.append([255, 255, 0])
-                                break
-
-        for car in carClusters:
-            #print(centroids[car[0]], centroids[car[1]], centroids[car[2]])
-            centres.append(centroids[car[0]])
-            centres.append(centroids[car[1]])
-            centres.append(centroids[car[2]])
-            colours.append([0, 255, 0])
-            colours.append([0, 0, 255])
-            colours.append([255, 0, 0])
-
-        self.pointsToImgsDrawWheels(pc, "geometry", centres, colours)
-        return carClusters
-
     def pointsToImgsDrawWheels(self, points, location, wheels, colours):
 
         res = 1024
@@ -432,6 +333,7 @@ class Annotator(multiprocessing.Process):
             y *= scale
             x = int(x)
             y = int(y)
+
             try:
                 accum[x+int(res/2), y+int(res/2)] = colours[wheel]
             except:
@@ -469,8 +371,9 @@ class Annotator(multiprocessing.Process):
                 accum[x+int(res/2)+1, y+int(res/2)] = colours[wheel]
             except:
                 pass
-        fn = "result/viz-" + location + "/" + self.filename + "-" + str(self.fileCounter) + ".png"
-        os.makedirs("./result/viz-" + location + "/", exist_ok=True)
+        fn = os.path.join(visualisationPath, location)
+        os.makedirs(fn, exist_ok=True)
+        fn = os.path.join(fn, self.filename + "-" + str(self.fileCounter) + ".png")
         cv2.imwrite(fn, accum)
 
 if __name__ == "__main__":
@@ -479,11 +382,10 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             jobs.append(Annotator(files[0], filename))
-            if len(jobs) > 8:
-                break
+    maxCores = 7
+    limit = maxCores
+    batch = maxCores
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    limit = 6
-    batch = 6
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()
