@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import copy
 import rospy
 import pickle
 import math
@@ -44,8 +45,8 @@ class Extractor(multiprocessing.Process):
 
         self.scanTopics = ["/back_left/sick_safetyscanners/scan", 
                 "/back_right/sick_safetyscanners/scan", 
-                "/back_middle/scan",
-                "/front/sick_safetyscanners/scan"]
+                "/front/sick_safetyscanners/scan",
+                "/back_middle/scan"]
 
     def run(self):
         
@@ -60,7 +61,6 @@ class Extractor(multiprocessing.Process):
             print("Process finished, bag failed for file %s" % (self.filename), flush = True)
             return
         print("Reading bag", flush = True)
-        #ctr = 0
         for topic, msg, t in rosbag.Bag(self.path + "/" + self.filename).read_messages():
 
             if topic in self.scanTopics:
@@ -68,7 +68,7 @@ class Extractor(multiprocessing.Process):
                     if topic == self.scanTopics[i]:
                         self.topicBuf[i] = msg
                 if topic == self.scanTopics[-1]:
-                    self.processScan(msg, t)
+                    self.processScan(msg, msg.header.stamp)
             if topic == "/odom":
                 self.position = msg.pose.pose.position
                 self.orientation = msg.pose.pose.orientation
@@ -103,7 +103,7 @@ class Extractor(multiprocessing.Process):
                 print("Old Scan present", flush = True)
                 return [], [], []
         for idx in range(len(msgs)):
-            msgs[idx] = lp.projectLaser(msgs[idx]) 
+            msgs[idx] = lp.projectLaser(msgs[idx])
             msg = pc2.read_points(msgs[idx])
 
             translation, quaternion = None, None
@@ -179,12 +179,14 @@ class Extractor(multiprocessing.Process):
 
     def processScan(self, msg, t):
 
-        msgs = self.topicBuf
-        self.topicBuf = [None, None, None]
-        msgs.append(msg)
+        t = rospy.Time(t.secs, t.nsecs)
 
-        if None in msgs:
+        if None in self.topicBuf:
             return
+
+        msgs = copy.deepcopy(self.topicBuf)
+        #self.topicBuf = [None, None, None]
+        msgs.append(msg)
 
         #if not self.odometryMoved():
         #    return

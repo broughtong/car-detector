@@ -4,8 +4,9 @@ Place the gt into data/gt
 
 #Extract the rosbags
 Run preprocessing/rosbag_extractor.py to extract the rosbags
+Run preprocessing/tf_extractor.py to extract the transforms
 
 #Perform simple car detection
 Run supervisor/detector.py
-To evaluate this only, run evaluation/simple.py
+To evaluate the results of this only, run evaluation/simple.py
 

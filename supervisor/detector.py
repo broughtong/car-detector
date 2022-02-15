@@ -47,7 +47,6 @@ class Annotator(multiprocessing.Process):
             self.detections.append(cars)
             self.relaxed.append(cars_rel)
             self.fileCounter += 1
-            break
         
         self.data["annotations"] = self.detections
         self.data["annotations_rel"] = self.relaxed
