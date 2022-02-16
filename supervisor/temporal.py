@@ -14,8 +14,11 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from tf_bag import BagTfTransformer
 from scipy.spatial.transform import Rotation as R
 import numpy as np
+import matplotlib.pyplot as plt
 
-datasetPath = "./result/detected/"
+datasetPath = "../data/results/simple-s"
+outputPath = "../data/results/temporal-s"
+visualisationPath = "../visualisation/temporal-s"
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -37,17 +40,16 @@ class Interpolator(multiprocessing.Process):
 
         print("Process spawned for file %s" % (self.filename), flush = True)
 
-        with open(self.path + self.filename, "rb") as f:
+        with open(os.path.join(self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
 
         self.interpolate()
         
-        with open(os.path.join("result", "interpolated", self.filename), "wb") as f:
+        with open(os.path.join(outputPath, self.filename), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
     def interpolate(self):
 
-        import matplotlib.pyplot as plt
         scans = self.data["scans"]
         trans = self.data["trans"]
         ts = self.data["ts"]
@@ -56,6 +58,7 @@ class Interpolator(multiprocessing.Process):
 
         robotPoses = []
 
+        #move everything into the odom frame
         for idx in range(len(scans)):
             robopose = np.array([-4.2, 0, 0, 1])
             mat = np.array(trans[idx])
@@ -78,6 +81,7 @@ class Interpolator(multiprocessing.Process):
         with suppress_stdout_stderr():
             annotationsOdom = np.array(annotationsOdom)
 
+        """
         for anno in annotationsOdom:
             for d in anno:
                 dx = math.cos(d[1])
@@ -87,12 +91,13 @@ class Interpolator(multiprocessing.Process):
         ax = plt.gca()
         ax.set_xlim([-10, 100])
         ax.set_ylim([-20, 100])
-        #plt.show()
+        plt.show()
+        """
 
         #if two detections close to each other in odom frame inside some temporal window
         #lerp between them
-        lerped = []
-        lerpedOnly = []
+        lerped = [] #includes real detections
+        lerpedOnly = [] #exclusively lerped
         for i in range(len(scans)):
             lerped.append([])
             lerpedOnly.append([])
@@ -146,6 +151,7 @@ class Interpolator(multiprocessing.Process):
                         lerped[mainIdx+i].append([x, y, r])
                         lerpedOnly[mainIdx+i].append([x, y, r])
 
+        #add real detections to lerped dataset
         for frameIdx in range(len(annotationsOdom)):
             for detectionIdx in range(len(annotationsOdom[frameIdx])):
                 lerped[frameIdx].append(annotationsOdom[frameIdx][detectionIdx])
@@ -210,6 +216,7 @@ class Interpolator(multiprocessing.Process):
                                     extrapolated[i].append(car)
                                     extrapolatedOnly[i].append(car)
 
+        #add real detections to extrapolated
         for frameIdx in range(len(annotationsOdom)):
             for detectionIdx in range(len(lerped[frameIdx])):
                 extrapolated[frameIdx].append(lerped[frameIdx][detectionIdx])
@@ -220,6 +227,7 @@ class Interpolator(multiprocessing.Process):
         self.data["extrapOdom"] = extrapolated
         self.data["extrapolated"] = []
 
+        #move back to robot frame
         for idx in range(len(scans)):
             mat = np.array(trans[idx])
             mat = np.linalg.inv(mat)
@@ -263,13 +271,13 @@ class Interpolator(multiprocessing.Process):
             self.data["lerped"] = np.array(self.data["lerped"])
             self.data["extrapolated"] = np.array(self.data["extrapolated"])
 
-        os.makedirs("./result/interpolated/", exist_ok=True)
-        with open("./result/interpolated/" + self.filename, "wb") as f:
+        os.makedirs(outputPath, exist_ok=True)
+        with open(os.path.join(outputPath, self.filename), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
         self.fileCounter = 0
         for i in range(len(scans)):
-            points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"]])
+            points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"]])
             dets = []
             colours = []
             for j in range(len(self.data["lerped"][i])):
@@ -285,6 +293,7 @@ class Interpolator(multiprocessing.Process):
             self.fileCounter += 1
 
         #lets test it i suppose
+        """
         lerped = self.data["lerped"]
         anodom = []
         for idx in range(len(scans)):
@@ -315,12 +324,14 @@ class Interpolator(multiprocessing.Process):
         ax.set_xlim([-10, 100])
         ax.set_ylim([-20, 100])
         #plt.show()
+        """
 
     def pointsToImgsDrawWheels(self, points, location, wheels, colours):
 
         res = 1024
         scale = 25
         accum = np.zeros((res, res, 3))
+        accum.fill(255)
 
         for point in points:
             x, y = point[:2]
@@ -329,7 +340,7 @@ class Interpolator(multiprocessing.Process):
             x = int(x)
             y = int(y)
             try:
-                accum[x+int(res/2), y+int(res/2)] = [255, 255, 255]
+                accum[x+int(res/2), y+int(res/2)] = [0, 0, 0]
             except:
                 pass
 
@@ -360,8 +371,9 @@ class Interpolator(multiprocessing.Process):
                 accum[x+int(res/2)-1, y+int(res/2)-1] = colours[wheel]
             except:
                 pass
-        fn = "result/viz-" + location + "/" + self.filename + "-" + str(self.fileCounter) + ".png"
-        os.makedirs("./result/viz-" + location + "/", exist_ok=True)
+        fn = os.path.join(visualisationPath, "%s-%s-%s.png" % (location, self.filename, self.fileCounter))
+        #location + "-" + self.filename + "-" + str(self.fileCounter) + ".png")
+        os.makedirs(visualisationPath, exist_ok=True)
         cv2.imwrite(fn, accum)
 
     def lerp(self, a, b, i, rot=False):
@@ -377,13 +389,13 @@ if __name__ == "__main__":
     
     jobs = []
     for files in os.walk(datasetPath):
-        #for filename in ["2020-10-30-10-54-24.bag.pickle"]:
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 jobs.append(Interpolator(files[0], filename))
-    cpuCores = 25
+    cpuCores = 4
     limit = cpuCores
     batch = cpuCores
+    print("Spawned %i processes" % (len(jobs)), flush = True)
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()

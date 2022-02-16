@@ -12,7 +12,7 @@ import sys
 datasetPath = "../data/results/simple-sb"
 tfPath = "../data/static_tfs"
 gtPath = "../data/gt"
-visualisationPath = "../visualisation"
+visualisationPath = "../visualisation/eval-simple-sb"
 
 if datasetPath[-1] == "/":
     datasetPath = datasetPath[:-1]
@@ -74,10 +74,10 @@ def evaluateFile(filename):
     fileCounter = 1
     ctr = 0
     for frame in gtdata[1]: #back middle sensor, higher framerate
-        #ctr += 1
+        ctr += 1
         #if ctr < 100:
         #    continue
-        #if ctr > 100:
+        #if ctr > 1:
         #    continue
 
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
@@ -150,15 +150,17 @@ def evaluateFile(filename):
                 dy = gt[1] - j[1]
                 diff = ((dx**2) + (dy**2))**0.5
                 if diff < detectionThreshold :
-                    jo = j[2] % math.pi
-                    gto = gt[2] % math.pi
+                    jo = j[2] % (math.pi*2)
+                    gto = gt[2] % (math.pi*2)
                     diff = abs(jo-gto)
                     if diff > (math.pi/2):
                         if jo > gto:
-                            jo -= (math.pi/2)
+                            #jo -= (math.pi/2)
+                            jo -= (math.pi)
                         else:
-                            jo += (math.pi/2)
-                        print(gto, jo, diff, abs(jo-gto))
+                            #jo += (math.pi/2)
+                            gto -= (math.pi)
+                        #print(gto, jo, diff, abs(jo-gto))
                         diff = abs(jo-gto)
                     else:
                         pass
@@ -200,7 +202,7 @@ def evaluateFile(filename):
                     det_gt_hit[key] += 1
         
         cols = [[255, 128, 128]] * len(frameAnnotations)
-        pointsToImgsDraw(filename, fileCounter, dataFrame, "evaluation-simple", frameAnnotations[1:], cols)
+        pointsToImgsDraw(filename, fileCounter, dataFrame, frameAnnotations[1:], cols)
         fileCounter += 1
 
     #recall distance
@@ -250,7 +252,7 @@ def makeGraph(hist, total, label, xlabel, filename):
     fig.savefig(filename)
     plt.close('all')
 
-def pointsToImgsDraw(filename, fileCounter, points, location, wheels, colours):
+def pointsToImgsDraw(filename, fileCounter, points, wheels, colours):
 
     res = 1024
     scale = 25
@@ -312,7 +314,7 @@ def pointsToImgsDraw(filename, fileCounter, points, location, wheels, colours):
             accum[x+int(res/2)+1, y+int(res/2)] = colours[wheel]
         except:
             pass
-    fn = os.path.join(visualisationPath, location)
+    fn = os.path.join(visualisationPath)
     os.makedirs(fn, exist_ok=True)
     fn = os.path.join(fn, filename + "-" + str(fileCounter) + ".png")
     cv2.imwrite(fn, accum)
