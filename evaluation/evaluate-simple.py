@@ -52,29 +52,34 @@ def evaluateFile(filename):
         gtdata = pickle.load(f)
 
     #analysis variables
-    tp, fp, fn = 0, 0, 0
+    tp_range = {}
+    fn_range = {}
+    fp_range = {}
     gt_det_total = 0
     gt_det_hit = {}
     det_gt_total = 0
     det_gt_hit = {}
     rot_total = 0
     rot_error = {}
-    tp_range = {}
-    fn_range = {}
-    graph_resolution = 100
-    for val in np.linspace(0.0, 5.0, num=graph_resolution):
+
+    detectionGraphLimit = 5.0
+    confusionGraphLimit = 20.0
+
+    graph_resolution = 250
+    for val in np.linspace(0.0, detectionGraphLimit, num=graph_resolution):
         gt_det_hit[val] = 0
         det_gt_hit[val] = 0
     for val in np.linspace(0.0, (math.pi/2) + 0.01, num=graph_resolution):
         rot_error[val] = 0
-    for val in np.linspace(0.0, 15.0, num=graph_resolution):
+    for val in np.linspace(0.0, confusionGraphLimit, num=graph_resolution):
         tp_range[val] = 0
         fn_range[val] = 0
+        fp_range[val] = 0
 
     fileCounter = 1
     ctr = 0
     for frame in gtdata[1]: #back middle sensor, higher framerate
-        ctr += 1
+        #ctr += 1
         #if ctr < 100:
         #    continue
         #if ctr > 1:
@@ -110,38 +115,38 @@ def evaluateFile(filename):
         detections = copy.deepcopy(data["annotations"][dataFrameIdx])
         gts = copy.deepcopy(frameAnnotations)[1:]
 
-        for gt in gts:
-            found = False
-            bestDiff = 9999
-            for j in detections:
-                dx = gt[0] - j[0]
-                dy = gt[1] - j[1]
-                diff = ((dx**2) + (dy**2))**0.5
-                if diff < bestDiff:
-                    bestDiff = diff
-                if diff < detectionThreshold:
-                    found = True
-            if found == True:
-                tp += 1
-                for key, _ in tp_range.items():
-                    if float(key) > bestDiff:
-                        tp_range[key] += 1
-            else:
-                fn += 1
-                for key, _ in fn_range.items():
-                    if float(key) > bestDiff:
-                        fn_range[key] += 1
-
-        for j in detections:
-            found = False
+        for rng in tp_range.keys():
+            
             for gt in gts:
-                dx = gt[0] - j[0]
-                dy = gt[1] - j[1]
-                diff = ((dx**2) + (dy**2))**0.5
-                if diff < detectionThreshold:
-                    found = True
-            if found == False:
-                fp += 1
+                dist = (gt[0]**2 + gt[1]**2)**0.5
+                if dist > rng:
+                    continue
+                found = False
+                for j in detections:
+                    dx = gt[0] - j[0]
+                    dy = gt[1] - j[1]
+                    diff = ((dx**2) + (dy**2))**0.5
+                    if diff < detectionThreshold:
+                        found = True
+                if found == True:
+                    tp_range[rng] += 1
+                else:
+                    fn_range[rng] += 1
+
+            for j in detections:
+                found = False
+                bestGT = None
+                for gt in gts:
+                    dx = gt[0] - j[0]
+                    dy = gt[1] - j[1]
+                    diff = ((dx**2) + (dy**2))**0.5
+                    if diff < detectionThreshold:
+                        found = True
+                if found == False:
+                    dist = (bestGT[0]**2 + bestGT[1]**2)**0.5
+                    if dist > rng:
+                        continue
+                    fp_range[rng] += 1
 
         #orientation graphs
         for j in detections:
@@ -164,7 +169,7 @@ def evaluateFile(filename):
                         diff = abs(jo-gto)
                     else:
                         pass
-                        print(gto, jo, diff)
+                        #print(gto, jo, diff)
                     for key, _ in rot_error.items():
                         if diff < float(key):
                             rot_error[key] += 1
@@ -207,23 +212,44 @@ def evaluateFile(filename):
 
     #recall distance
     recall_range = {}
-    recall_total = 0
-    for val in np.linspace(0.0, 15.0, num=graph_resolution):
-        if tp_range[val] > 0 or fn_range[val] > 0:
-            recall_range[val] = tp_range[val] / (tp_range[val] + fn_range[val])
+    precision_range = {}
+    lastVal = None
+    for val in np.linspace(0.0, confusionGraphLimit, num=graph_resolution):
+        if tp_range[val] == 0 and fn_range[val] == 0:
+            recall_range[val] = None
         else:
-            recall_range[val] = 0
+            recall_range[val] = tp_range[val] / (tp_range[val]+fn_range[val])
+        if tp_range[val] == 0 and fp_range[val] == 0:
+            precision_range[val] = None
+        else:
+            precision_range[val] = tp_range[val] / (tp_range[val]+fp_range[val])
+        lastVal = val
+    precision = tp_range[lastVal] / (tp_range[lastVal] + fp_range[lastVal])
+    recall = tp_range[lastVal] / (tp_range[lastVal] + fn_range[lastVal])
+    tp = tp_range[lastVal]
+    fn = fn_range[lastVal]
+    fp = fp_range[lastVal]
+
+    blanksRecall = [x for x in recall_range.keys() if recall_range[x] == None]
+    blanksPrecision = [x for x in precision_range.keys() if precision_range[x] == None]
+    recallIDs = [x for x in recall_range.keys() if x not in blanksRecall]
+    precisionIDs = [x for x in precision_range.keys() if x not in blanksPrecision]
+    filteredRecall = {}
+    for key in recallIDs:
+        filteredRecall[key] = recall_range[key]
+    filteredPrecision = {}
+    for key in precisionIDs:
+        filteredPrecision[key] = precision_range[key]
 
     graphPath = os.path.join(resultsPath, "graph")
     os.makedirs(graphPath, exist_ok=True)
+
     makeGraph(gt_det_hit, gt_det_total, "GT To Detection", "Distance [m]", os.path.join(graphPath, "gtdet-" + filename + ".png"))
     makeGraph(det_gt_hit, det_gt_total, "Detection To GT", "Distance [m]", os.path.join(graphPath, "detgt-" + filename + ".png"))
     makeGraph(rot_error, rot_total, "Rotational Error", "Rotation [rads]", os.path.join(graphPath, "rot-" + filename + ".png"))
-    makeGraph(tp_range, tp, "TP Range", "Distance [m]", os.path.join(graphPath, "tprange-" + filename + ".png"))
-    makeGraph(fn_range, fn, "FN Range", "Distance [m]", os.path.join(graphPath, "fnrange-" + filename + ".png"))
-    makeGraph(recall_range, 1.0, "Recall Range", "Distance [m]", os.path.join(graphPath, "recall-" + filename + ".png"))
-    precision = tp / (tp+fp)
-    recall = tp / (tp+fn)
+    makeGraph(filteredRecall, 1.0, "Recall Range", "Distance [m]", os.path.join(graphPath, "recall-" + filename + ".png"))
+    makeGraph(filteredPrecision, 1.0, "Precision Range", "Distance [m]", os.path.join(graphPath, "precision-" + filename + ".png"))
+
     print("Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
     print("Precision/Recall = %f %f" % (precision, recall))
     with open(os.path.join(resultsPath, "conf.pickle"), "wb") as f:
