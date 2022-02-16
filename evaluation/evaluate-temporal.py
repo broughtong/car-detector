@@ -9,10 +9,10 @@ import pickle
 import os
 import sys
 
-datasetPath = "../data/results/simple-sb"
+datasetPath = "../data/results/temporal-s"
 tfPath = "../data/static_tfs"
 gtPath = "../data/gt"
-visualisationPath = "../visualisation/eval-simple-sb"
+visualisationPath = "../visualisation/eval-temporal-s"
 
 if datasetPath[-1] == "/":
     datasetPath = datasetPath[:-1]
@@ -112,7 +112,7 @@ def evaluateFile(filename):
         detectionThreshold = 0.5
 
         #confusion matrix
-        detections = copy.deepcopy(data["annotations"][dataFrameIdx])
+        detections = copy.deepcopy(data["extrapolated"][dataFrameIdx])
         gts = copy.deepcopy(frameAnnotations)[1:]
 
         for rng in tp_range.keys():
