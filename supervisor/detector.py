@@ -10,8 +10,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 datasetPath = "../data/extracted/"
-outputPath = "../data/results/simple/"
-visualisationPath = "../visualisation/simple/"
+outputPath = "../data/results/simple-s/"
+visualisationPath = "../visualisation/simple-s/"
 WIDTH = 1.5
 LENGTH = 2.5
 DIAGONAL = 3.1
@@ -71,8 +71,8 @@ class Annotator(multiprocessing.Process):
 
         points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"]])
         middle_points = np.array(scan["sick_back_middle"])
-        cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=False, use_bumper=False)
-        cars_relaxed = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=False, use_bumper=False)
+        cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
+        cars_relaxed = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
 
         wheels = []
         colours = []
