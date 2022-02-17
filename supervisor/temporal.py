@@ -392,10 +392,10 @@ if __name__ == "__main__":
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 jobs.append(Interpolator(files[0], filename))
+    print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 4
     limit = cpuCores
     batch = cpuCores
-    print("Spawned %i processes" % (len(jobs)), flush = True)
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()

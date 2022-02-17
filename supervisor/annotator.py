@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import random
 import rospy
 import pickle
 import math
@@ -17,8 +18,9 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "./result/lanoise/"
-datasetPath = "./result_small/interpolated/"
+datasetPath = "../data/results/temporal-s"
+annotationSource = "extrapolated"
+outputPath = "../annotations/maskrcnn"
 lp = lg.LaserProjection()
 
 @contextmanager
@@ -39,19 +41,17 @@ class Annotator(multiprocessing.Process):
         
         print("Process spawned for file %s" % (self.filename), flush = True)
 
-        with open(self.path + self.filename, "rb") as f:
+        with open(os.path.join(self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
 
         self.annotate()
-
-        with open(os.path.join("result", "interpolated", self.filename), "wb") as f:
-            pickle.dump(self.data, f, protocol=2)
 
     def pointsToImgsDrawWheels(self, points, location, frame, wheels, colours):
 
         res = 1024
         scale = 20
         accum = np.zeros((res, res, 3))
+        accum.fill(255)
 
         for point in points:
             x, y = point[:2]
@@ -60,7 +60,7 @@ class Annotator(multiprocessing.Process):
             x = int(x)
             y = int(y)
             try:
-                accum[x+int(res/2), y+int(res/2)] = [255, 255, 255]
+                accum[x+int(res/2), y+int(res/2)] = [0, 0, 0]
             except:
                 pass
 
@@ -92,71 +92,93 @@ class Annotator(multiprocessing.Process):
             except:
                 pass
 
-        kernel = np.ones((5, 5), 'uint8')
-        dilate_img = cv2.dilate(accum, kernel, iterations=1)
+        fn = os.path.join(outputPath, location, self.filename + "-" + str(frame) + ".png")
+        cv2.imwrite(fn, accum)
 
-        fn = "annotations/maskrcnn/" + location + "/" + self.filename + "-" + str(frame) + ".png"
-        #cv2.imwrite(fn, accum)
-        cv2.imwrite(fn, dilate_img)
+        return accum
 
-    def drawAnnotations(self, frame, annotations):
+    def drawCar(self, centreX, centreY, fullHeight, fullWidth, angle, img, debugimg):
 
+        angle = angle % (math.pi * 2)
+        alpha = math.cos(angle) * 0.5
+        beta = math.sin(angle) * 0.5
+        a = [int(centreY + alpha * fullHeight - beta * fullWidth), int(centreX - beta * fullHeight - alpha * fullWidth)]
+        b = [int(centreY - alpha * fullHeight - beta * fullWidth), int(centreX + beta * fullHeight - alpha * fullWidth)]
+        c = [int(2 * centreY - a[0]), int(2 * centreX - a[1])]
+        d = [int(2 * centreY - b[0]), int(2 * centreX - b[1])]
+
+        contours = np.array([a, b, c, d])
+        colour = lambda : [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
+        cv2.fillPoly(img, pts = [contours], color = colour())
+        cv2.fillPoly(debugimg, pts = [contours], color =(255,0,255))
+
+        debugimg[centreX, centreY] = [255, 0, 255]
+        debugimg[a[0], a[1]] = [125, 0, 128]
+        debugimg[b[0], b[1]] = [125, 255, 0]
+        debugimg[c[0], c[1]] = [125, 255, 0]
+        debugimg[d[0], d[1]] = [125, 255, 0]
+
+    def drawAnnotation(self, img, frame, annotations):
+        
         res = 1024
         scale = 20
+        ctr = 0
 
-        for idx in range(len(annotations)):
+        combineMasks = True
 
-            i = annotations[idx]
-            i = [50, 10, 0]
-            print(i)
+        if combineMasks == False:
+            for annotation in annotations:
 
-            img = np.zeros((res, res, 3), np.uint8)
+                accum = np.zeros((res, res, 3))
+                
+                x, y = int(annotation[0]*scale), int(annotation[1]*scale)
+                width, height = int(2.3*scale), int(4.5*scale)
 
-            carSize = (4.38*scale, 1.84*scale)
-            carPos = (int(scale*i[0])+int(res/2), int(scale*i[1])+int(res/2))
+                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img)
+                fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + "-" + str(ctr) + ".png")
+                cv2.imwrite(fn, accum)
+                ctr += 1
 
-            print(carPos)
-            rect = (carPos, carSize, i[2] * 180/ 3.141592)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            print(box)
-            cv2.drawContours(img,[box],0,(255,255,255),-1)
-
-            fn = "annotations/maskrcnn/annotations/" + self.filename + "-" + str(frame) + "-" + str(idx) + ".png"
-            cv2.imwrite(fn, img)
+        else:
+            accum = np.zeros((res, res, 3))
+            for annotation in annotations:
+                x, y = int(annotation[0]*scale), int(annotation[1]*scale)
+                width, height = int(2.3*scale), int(4.5*scale)
+                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img)
+            fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
+            cv2.imwrite(fn, accum)
 
     def annotate(self):
 
         for frame in range(len(self.data["scans"])):
             
-            #first create image
-            points = []
-            for key, value in self.data["scans"][frame].items():
-                if key == "sick_back_middle" or key == "sick_front":
-                    continue
-                for point in value:
-                    points.append(point)
+            #image dataset
+            scan = self.data["scans"][frame]
+            combined = np.concatenate([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"], scan["sick_back_middle"]])
 
-            self.pointsToImgsDrawWheels(points, "imgs", frame, [[15, 4]], [[255, 0, 255]])
+            annotations = self.data[annotationSource][frame]
+            img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
 
-            annotations = self.data["extrapolated"][frame]
-            self.drawAnnotations(frame, annotations)
-            break
+            self.drawAnnotation(img, frame, annotations)
+
+            fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
+            cv2.imwrite(fn, img)
 
 if __name__ == "__main__":
 
-    os.makedirs("./annotations/maskrcnn/imgs", exist_ok=True)
-    os.makedirs("./annotations/maskrcnn/annotations", exist_ok=True)
+    os.makedirs(os.path.join(outputPath, "imgs"), exist_ok=True)
+    os.makedirs(os.path.join(outputPath, "annotations"), exist_ok=True)
+    os.makedirs(os.path.join(outputPath, "debug"), exist_ok=True)
     
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 jobs.append(Annotator(files[0], filename))
-                break
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    limit = 12
-    batch = 12
+    cpuCores = 4
+    limit = cpuCores
+    batch = cpuCores
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()

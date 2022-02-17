@@ -381,10 +381,10 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             jobs.append(Annotator(files[0], filename))
+    print("Spawned %i processes" % (len(jobs)), flush = True)
     maxCores = 7
     limit = maxCores
     batch = maxCores
-    print("Spawned %i processes" % (len(jobs)), flush = True)
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()
