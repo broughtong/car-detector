@@ -277,6 +277,7 @@ class Interpolator(multiprocessing.Process):
 
         self.fileCounter = 0
         for i in range(len(scans)):
+
             points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"]])
             dets = []
             colours = []

@@ -17,6 +17,8 @@ Run supervisor/temporal.py to run the temporal filter
 If you wish to analyse the results of the temporal filter, run evaluation/temporal.py
 
 If you wish to run the weather simulate on the results, run supervisor/augment.py
-Run supervisor/annotator.py to create annotations
+Run supervisor/annotator.py to create annotations.
 
-#Train the networks
+# Train the networks
+The MaskRCNN network can be trained by running networks/maskrcnn/training.py
+The networks can be trained by running networks/

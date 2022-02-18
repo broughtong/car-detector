@@ -22,6 +22,7 @@ datasetPath = "../data/results/temporal-s"
 annotationSource = "extrapolated"
 outputPath = "../annotations/maskrcnn"
 lp = lg.LaserProjection()
+movementThreshold = 0.5
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -97,7 +98,7 @@ class Annotator(multiprocessing.Process):
 
         return accum
 
-    def drawCar(self, centreX, centreY, fullHeight, fullWidth, angle, img, debugimg):
+    def drawCar(self, centreX, centreY, fullHeight, fullWidth, angle, img, debugimg, annotationIdx=None):
 
         angle = angle % (math.pi * 2)
         alpha = math.cos(angle) * 0.5
@@ -108,8 +109,13 @@ class Annotator(multiprocessing.Process):
         d = [int(2 * centreY - b[0]), int(2 * centreX - b[1])]
 
         contours = np.array([a, b, c, d])
-        colour = lambda : [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
-        cv2.fillPoly(img, pts = [contours], color = colour())
+        if annotationIdx == None:
+            colour = lambda : [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
+            cv2.fillPoly(img, pts = [contours], color = colour())
+        else:
+            colour = annotationIdx
+            cv2.fillPoly(img, pts = [contours], color = colour)
+
         cv2.fillPoly(debugimg, pts = [contours], color =(255,0,255))
 
         debugimg[centreX, centreY] = [255, 0, 255]
@@ -140,29 +146,48 @@ class Annotator(multiprocessing.Process):
                 ctr += 1
 
         else:
-            accum = np.zeros((res, res, 3))
+            accum = np.zeros((res, res, 1))
+            annotationIdx = 1
             for annotation in annotations:
                 x, y = int(annotation[0]*scale), int(annotation[1]*scale)
                 width, height = int(2.3*scale), int(4.5*scale)
-                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img)
+                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img, annotationIdx)
+                annotationIdx += 1
             fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
             cv2.imwrite(fn, accum)
 
     def annotate(self):
 
+        oldx, oldy, = 999, 999
         for frame in range(len(self.data["scans"])):
             
+            #throw away frames without much movement
+            trans = self.data["trans"][i]
+            x = trans[0][-1]
+            y = trans[1][-1]
+
+            diffx = x - oldx
+            diffy = y - oldy
+            dist = ((diffx**2)+(diffy**2))**0.5
+
+            if dist < movementThreshold:
+                continue
+            else:
+                oldx = x
+                oldy = y
+
             #image dataset
             scan = self.data["scans"][frame]
             combined = np.concatenate([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"], scan["sick_back_middle"]])
 
             annotations = self.data[annotationSource][frame]
-            img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
+            if len(annotations) > 0:
+                img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
 
-            self.drawAnnotation(img, frame, annotations)
+                self.drawAnnotation(img, frame, annotations)
 
-            fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
-            cv2.imwrite(fn, img)
+                fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
+                cv2.imwrite(fn, img)
 
 if __name__ == "__main__":
 
