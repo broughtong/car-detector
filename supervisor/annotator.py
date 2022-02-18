@@ -20,7 +20,7 @@ import numpy as np
 
 datasetPath = "../data/results/temporal-s"
 annotationSource = "extrapolated"
-outputPath = "../annotations/maskrcnn"
+outputPath = "../annotations/maskrcnn/all"
 lp = lg.LaserProjection()
 movementThreshold = 0.5
 
@@ -162,7 +162,7 @@ class Annotator(multiprocessing.Process):
         for frame in range(len(self.data["scans"])):
             
             #throw away frames without much movement
-            trans = self.data["trans"][i]
+            trans = self.data["trans"][frame]
             x = trans[0][-1]
             y = trans[1][-1]
 

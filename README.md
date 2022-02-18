@@ -18,6 +18,7 @@ If you wish to analyse the results of the temporal filter, run evaluation/tempor
 
 If you wish to run the weather simulate on the results, run supervisor/augment.py
 Run supervisor/annotator.py to create annotations.
+Run supervisor/datasetDivision.py to break the images into training/evaluation subset by rosbag
 
 # Train the networks
 The MaskRCNN network can be trained by running networks/maskrcnn/training.py
