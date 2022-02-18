@@ -4,3 +4,4 @@ visualisation
 evaluation/results
 *.swo
 *.swp
+__pycache__

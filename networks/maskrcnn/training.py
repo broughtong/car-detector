@@ -44,6 +44,7 @@ class PennFudanDataset(object):
         # split the color-encoded mask into a set
         # of binary masks
         masks = mask == obj_ids[:, None, None]
+        
 
         # get bounding box coordinates for each mask
         num_objs = len(obj_ids)
@@ -150,7 +151,7 @@ def main():
                                                    gamma=0.1)
 
     # let's train it for 10 epochs
-    num_epochs = 2
+    num_epochs = 1
 
     for epoch in range(num_epochs):
         # train for one epoch, printing every 10 iterations
@@ -159,6 +160,9 @@ def main():
         lr_scheduler.step()
         # evaluate on the test dataset
         evaluate(model, data_loader_test, device=device)
+
+    #torch.save(model.state_dict(), "model")
+    torch.save(model, "models/model")
 
     print("That's it!")
     
