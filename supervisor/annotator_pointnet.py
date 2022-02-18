@@ -20,7 +20,7 @@ import numpy as np
 
 datasetPath = "../data/results/temporal-s"
 annotationSource = "extrapolated"
-outputPath = "../annotations/maskrcnn/all"
+outputPath = "../annotations/pointnet/all"
 lp = lg.LaserProjection()
 movementThreshold = 0.5
 
@@ -156,6 +156,111 @@ class Annotator(multiprocessing.Process):
             fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
             cv2.imwrite(fn, accum)
 
+    def tripletOrientation(self, a, b, c):
+        orr = ((b[1] - a[1]) * (c[0] - b[0])) - ((b[0] - a[0]) * (c[1] - b[1]))
+        if orr > 0:
+            return 1
+        elif orr < 0:
+            return -1
+        return 0
+
+    def colinear(self, a, b, c):
+        if ((b[0] <= max(a[0], c[0])) and (b[0] >= min(a[0], c[0])) and (b[1] <= max(a[1], c[1])) and (b[1] >= min(a[1], c[1]))):
+            return True
+        else:
+            return False
+
+    def lineIntersect(self, a, b, c, d):
+        o1 = self.tripletOrientation(a, b, c)
+        o2 = self.tripletOrientation(a, b, d)
+        o3 = self.tripletOrientation(c, d, a)
+        o4 = self.tripletOrientation(c, d, b)
+
+        if o1 != o2 and o3 != o4:
+            return True
+
+        if ((o1 == 0) and self.colinear(a, c, b)):
+            return True
+        if ((o2 == 0) and self.colinear(a, d, b)):
+            return True
+        if ((o3 == 0) and self.colinear(c, a, d)):
+            return True
+        if ((o4 == 0) and self.colinear(c, b, d)):
+            return True
+        return False
+
+    def getBoundaryPoints(self, poly):
+
+        centreX = poly[0]#*scale) + (res//2)
+        centreY = poly[1]#*scale) + (res//2)
+        angle = poly[2] % (math.pi*2)
+        width = 2.3# * scale
+        height = 4.5# * scale
+        height = 2.3# * scale
+        width = 4.5# * scale
+
+        alpha = math.cos(angle) * 0.5
+        beta = math.sin(angle) * 0.5
+
+        a = [centreX - beta * height - alpha * width, centreY + alpha * height - beta * width]
+        b = [centreX + beta * height - alpha * width, centreY - alpha * height - beta * width]
+        c = [2 * centreX - a[0], 2 * centreY - a[1]]
+        d = [2 * centreX - b[0], 2 * centreY - b[1]]
+
+        return a, b, c, d
+
+    def isInsideAnnotation(self, pos, poly):
+
+        poly = self.getBoundaryPoints(poly)
+
+        counterPos = (9999, pos[1])
+        intersects = 0
+
+        for idx in range(len(poly)):
+            pa = poly[idx]
+            pb = poly[0]
+            if idx != len(poly)-1:
+                pb = poly[idx+1]
+
+            if self.lineIntersect(pos, counterPos, pa, pb):
+                intersects += 1
+
+        return intersects % 2
+
+    def getAnnotation(self, scan, frameIdx, annotations):
+
+        backgroundPoints = []
+        points = []
+        cols = []
+        debugbackgroundPoints = []
+        debugpoints = []
+        debugcols = []
+
+        for i in scan:
+            inAnnotation = False
+            for annotation in annotations:
+                if self.isInsideAnnotation([i[0], i[1]], annotation):
+                    inAnnotation = True
+                    break
+            if inAnnotation == False:
+                backgroundPoints.append([i[0], i[1], i[2]])
+                debugbackgroundPoints.append([i[0], i[1], i[2]])
+            else:
+                cols.append([255, 0, 255])
+                points.append([i[0], i[1], i[2]])
+                debugcols.append([255, 0, 255])
+                debugpoints.append([i[0], i[1], i[2]])
+
+        for annotation in annotations:
+            poly = self.getBoundaryPoints(annotation)
+            for i in poly:
+                debugpoints.append(i)
+                debugcols.append([255, 0, 0])
+            debugpoints.append([annotation[0], annotation[1]])
+            debugcols.append([0, 25, 255])
+
+        return backgroundPoints, points, cols, debugbackgroundPoints, debugpoints, debugcols
+
     def annotate(self):
 
         oldx, oldy, = 999, 999
@@ -172,9 +277,6 @@ class Annotator(multiprocessing.Process):
 
             if dist < movementThreshold:
                 continue
-            else:
-                oldx = x
-                oldy = y
 
             #image dataset
             scan = self.data["scans"][frame]
@@ -182,16 +284,15 @@ class Annotator(multiprocessing.Process):
 
             annotations = self.data[annotationSource][frame]
             if len(annotations) > 0:
-                img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
 
-                self.drawAnnotation(img, frame, annotations)
+                backgroundPoints, points, cols, debugbp, debugp, debugcol = self.getAnnotation(combined, frame, annotations)
+                self.pointsToImgsDrawWheels(debugbp, "debug", str(frame), debugp, debugcol)
 
-                fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
-                cv2.imwrite(fn, img)
+                oldx = x
+                oldy = y
 
 if __name__ == "__main__":
 
-    os.makedirs(os.path.join(outputPath, "imgs"), exist_ok=True)
     os.makedirs(os.path.join(outputPath, "annotations"), exist_ok=True)
     os.makedirs(os.path.join(outputPath, "debug"), exist_ok=True)
     

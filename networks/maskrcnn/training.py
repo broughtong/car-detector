@@ -14,7 +14,7 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-datasetPath = "../../annotations/maskrcnn/"
+datasetPath = "../../annotations/maskrcnn/training"
 
 class PennFudanDataset(object):
     def __init__(self, root, transforms):
@@ -44,7 +44,6 @@ class PennFudanDataset(object):
         # split the color-encoded mask into a set
         # of binary masks
         masks = mask == obj_ids[:, None, None]
-        
 
         # get bounding box coordinates for each mask
         num_objs = len(obj_ids)

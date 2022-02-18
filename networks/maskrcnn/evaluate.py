@@ -34,13 +34,6 @@ class PennFudanDataset(object):
     def __len__(self):
         return len(self.imgs)
 
-#def get_transform(train):
-#    transforms = []
-#    transforms.append(T.ToTensor())
-#    if train:
-#        transforms.append(T.RandomHorizontalFlip(0.5))
-#    return T.Compose(transforms)
-
 #loader = T.Compose([T.Scale(imsize), T.ToTensor()])
 floader = T.Compose([T.ToTensor()])
 
