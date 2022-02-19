@@ -58,6 +58,11 @@ def main():
         img = image_loader(path)
         result = model(img)
 
+        masks = []
+        for idx in range(len(result[0]["masks"])):
+            masks.append(result[0]["masks"][idx][0].detach().cpu().numpy())
+        result[0]["masks"] = masks
+
         resultfn = os.path.join(resultsPath, modelName.split("/")[-1], imgfn + ".pickle")
         with open(resultfn, "wb") as f:
             pickle.dump(result, f, protocol=2)

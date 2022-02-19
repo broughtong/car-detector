@@ -65,7 +65,7 @@ class Converter(multiprocessing.Process):
             x = (float(box[0]) + float(box[2])) / 2
             y = (float(box[1]) + float(box[3])) / 2
 
-            mask = mask.detach().cpu().numpy()
+            #mask = mask.detach().cpu().numpy()
             mask = mask[math.floor(box[1]):math.ceil(box[3]), math.floor(box[0]):math.ceil(box[2])]
 
             coords = []
