@@ -23,6 +23,8 @@ annotationSource = "extrapolated"
 outputPath = "../annotations/maskrcnn/all"
 lp = lg.LaserProjection()
 movementThreshold = 0.5
+gtPath = "../data/gt"
+gtBags = []
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -185,10 +187,18 @@ class Annotator(multiprocessing.Process):
 
                 fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
                 cv2.imwrite(fn, img)
-                oldx = x
-                oldy = y
+                if self.filename not in gtBags:
+                    oldx = x
+                    oldy = y
 
 if __name__ == "__main__":
+
+    for files in os.walk(gtPath):
+        for fn in files[2]:
+            fn = fn.split("-")[:-1]
+            fn = "-".join(fn)
+            fn += ".bag.pickle"
+            gtBags.append(fn)
 
     os.makedirs(os.path.join(outputPath, "imgs"), exist_ok=True)
     os.makedirs(os.path.join(outputPath, "annotations"), exist_ok=True)

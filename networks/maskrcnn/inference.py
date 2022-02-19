@@ -11,9 +11,9 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-modelName = "./models/19-02-22-00_44.pth"
-resultsPath = "../../data/results/maskrcnn/"
-datasetPath = "../../annotations/maskrcnn/testing/imgs"
+modelName = "./models/19-02-22-03_03.pth"
+resultsPath = "../../data/results/maskrcnn_raw"
+datasetPath = "../../annotations/maskrcnn/evaluation/imgs"
 
 class Dataset(object):
     def __init__(self, root):
@@ -37,12 +37,15 @@ def image_loader(image_name):
     loader = T.Compose([T.ToTensor()])
     image = loader(image, None)[0]
     #image = image.unsqueeze(0)
-    return [image.cuda()]
+    if torch.cuda.is_available():
+        return [image.cuda()]
+    else:
+        return [image]
 
 def main():
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = torch.load(modelName)
+    model = torch.load(modelName, map_location=device)
     model.to(device)
     model.eval()
 
