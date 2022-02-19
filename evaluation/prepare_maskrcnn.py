@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 datasetPath = "../data/results/maskrcnn_raw"
 combinePath = "../data/results/temporal-s"
-outputPath = "../data/results/maskrcnn"
+outputPath = "../data/results/maskrcnn_raw"
 #visualisationPath = "../visualisation/"
 
 @contextmanager
@@ -49,7 +49,7 @@ class Converter(multiprocessing.Process):
         self.convert()
         
         os.makedirs(os.path.join(outputPath, self.path), exist_ok=True)
-        with open(os.path.join(outputPath, self.path, self.filename), "wb") as f:
+        with open(os.path.join(outputPath, self.path, self.filename + ".annotations.pickle"), "wb") as f:
             pickle.dump(self.annotations, f, protocol=2)
 
     def convert(self):
@@ -98,7 +98,7 @@ if __name__ == "__main__":
             if filename[-7:] == ".pickle":
                 jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 6
+    cpuCores = 24
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
