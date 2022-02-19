@@ -10,7 +10,7 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-datasetPath = "../../annotations/maskrcnn/training"
+datasetPath = "../../annotations/maskrcnn"
 
 class Dataset(object):
     def __init__(self, root, transforms):
@@ -119,6 +119,7 @@ def main():
         evaluate(model, data_loader_test, device=device)
 
     modelpath = datetime.datetime.now().strftime("models/%d-%m-%y-%H_%M.pth")
+    os.makedirs("./models", exist_ok=True)
     torch.save(model, modelpath)
 
     print("Finished")
