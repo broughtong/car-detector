@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 datasetPath = "../data/results/maskrcnn_raw"
 combinePath = "../data/results/temporal-s"
 outputPath = "../data/results/maskrcnn_raw"
+combinedOutPath = "../data/results/maskrcnn"
 #visualisationPath = "../visualisation/"
 
 @contextmanager
@@ -49,7 +50,7 @@ class Converter(multiprocessing.Process):
         self.convert()
         
         os.makedirs(os.path.join(outputPath, self.path), exist_ok=True)
-        with open(os.path.join(outputPath, self.path, self.filename + ".annotations.pickle"), "wb") as f:
+        with open(os.path.join(outputPath, self.path, self.filename + ".annotations"), "wb") as f:
             pickle.dump(self.annotations, f, protocol=2)
 
     def convert(self):
@@ -110,3 +111,59 @@ if __name__ == "__main__":
             limit += batch
             jobs[i].start()
 
+    combinableFilenames = []
+    for files in os.walk(datasetPath):
+        for filename in files[2]:
+            if filename[-12:] == ".annotations":
+                if filename.split(".")[0] not in combinableFilenames:
+                    combinableFilenames.append(filename.split(".")[0])
+
+    for base in combinableFilenames:
+
+        #open combinable file
+        combineFile = ""
+        for files in os.walk(combinePath):
+            for filename in files[2]:
+                if filename.split(".")[0] == base:
+                    combineFile = filename
+                    break
+
+        if combineFile == "":
+            print("Error combining ", filename)
+            break
+
+        data = []
+        with open(os.path.join(combinePath, combineFile), "rb") as f:
+            data = pickle.load(f)
+
+        readyFiles = []
+        for files in os.walk(datasetPath):
+            for filename in files[2]:
+                if filename[-12:] == ".annotations":
+                    if filename.split(".")[0] == base:
+                        readyFiles.append(filename)
+
+        print(len(readyFiles), len(data["ts"])
+        if len(readyFiles) != len(data["ts"]):
+            print("Warning, frame mismatch", base)
+
+        data["maskrcnn"] = []
+        for i in range(len(readyFiles)):
+            data["maskrcnn"].append(None)
+
+        #open each file, add it to the correct frame
+        for filename in readyFiles:
+            idx = int(filename.split(".pickle-")[1].split(".")[0])
+            with open(os.path.join(datasetPath, readyFiles), "rb") as f:
+                annotations = pickle.load(f)
+                data["maskrcnn"][idx] = annotations
+        
+        for i in range(len(readyFiles)):
+            if data["maskrcnn"][i] == None:
+                print("Warning, empty frame found")
+
+        os.makedirs(combinedOutPath, exist_ok=True)
+        with open(os.path.join(combinedOutPath, base + ".pickle"), "wb") as f:
+            pickle.dump(data, f, protocol=2)
+
+    
