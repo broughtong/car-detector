@@ -43,11 +43,12 @@ class Converter(multiprocessing.Process):
 
         with open(os.path.join(datasetPath, self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
-        combinefn = os.path.join(combinePath, self.filename.split(".pickle")[0]+".pickle")
-        with open(combinefn, "rb") as f:
-            self.combinedata = pickle.load(f)
+        #combinefn = os.path.join(combinePath, self.filename.split(".pickle")[0]+".pickle")
+        #with open(combinefn, "rb") as f:
+        #    self.combinedata = pickle.load(f)
 
         self.convert()
+        self.data = None
         
         os.makedirs(os.path.join(outputPath, self.path), exist_ok=True)
         with open(os.path.join(outputPath, self.path, self.filename + ".annotations"), "wb") as f:
@@ -97,7 +98,8 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
-                jobs.append(Converter(files[0].split("/")[-1], filename))
+                if ".annotations." not in filename:
+                    jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 24
     limit = cpuCores
