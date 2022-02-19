@@ -2,6 +2,7 @@ data
 annotations
 visualisation
 evaluation/results
+models
 *.swo
 *.swp
 __pycache__

@@ -12,24 +12,20 @@ import utils
 import transforms as T
 
 modelName = "./models/19-02-22-00_44.pth"
-resultsPath = "../../results/maskrcnn/"
-datasetPath = "../../"
+resultsPath = "../../data/results/maskrcnn/"
+datasetPath = "../../annotations/maskrcnn/testing/imgs"
 
 class Dataset(object):
-    def __init__(self, root, transforms):
+    def __init__(self, root):
         self.root = root
-        self.transforms = transforms
-        # load all image files, sorting them to
-        # ensure that they are aligned
         self.imgs = list(sorted(os.listdir(os.path.join(root))))
 
     def __getitem__(self, idx):
-        # load images and masks
         img_path = os.path.join(self.root, self.imgs[idx])
         img = Image.open(img_path).convert("RGB")
-
-        #if self.transforms is not None:
-        #    img, target = self.transforms(img, target)
+        loader = T.Compose([T.ToTensor()])
+        img = loader(img, None)[0]
+        img = img.cuda()
 
         return img
 
@@ -50,19 +46,26 @@ def main():
     model.to(device)
     model.eval()
 
-    img = image_loader("test/2020-11-17-13-47-41.bag.pickle-0.png")
+    outputFolder = os.path.join(resultsPath, modelName.split("/")[-1])
+    os.makedirs(outputFolder, exist_ok=True)
 
-    #dataset = Dataset(datasetPath, get_transform(train=False))
+    imgs = list(os.listdir(datasetPath))
+    for imgfn in imgs:
+        path = os.path.join(datasetPath, imgfn)
+        img = image_loader(path)
+        result = model(img)
 
-    out = model(img)
-    with open("dump", "wb") as f:
-        pickle.dump(out, f)
+        resultfn = os.path.join(resultsPath, modelName.split("/")[-1], imgfn + ".pickle")
+        with open(resultfn, "wb") as f:
+            pickle.dump(result, f, protocol=2)
 
-    img = np.array(out[0]["masks"][0][0].detach().cpu().numpy())
+    """
+    img = np.array(result[0]["masks"][0][0].detach().cpu().numpy())
     for row in range(len(img)):
         for val in range(len(img)):
             img[row][val] = (img[row][val])*255
     cv2.imwrite("et.png", img)
+    """
 
 if __name__ == "__main__":
     main()
