@@ -135,7 +135,6 @@ def evaluateFile(filename):
 
             for j in detections:
                 found = False
-                bestGT = None
                 for gt in gts:
                     dx = gt[0] - j[0]
                     dy = gt[1] - j[1]
@@ -143,7 +142,7 @@ def evaluateFile(filename):
                     if diff < detectionThreshold:
                         found = True
                 if found == False:
-                    dist = (bestGT[0]**2 + bestGT[1]**2)**0.5
+                    dist = (j[0]**2 + j[1]**2)**0.5
                     if dist > rng:
                         continue
                     fp_range[rng] += 1

@@ -9,10 +9,10 @@ import pickle
 import os
 import sys
 
-datasetPath = "../data/results/temporal-s"
+datasetPath = "../data/results/maskrcnn/19-02-22-03_03.pth"
 tfPath = "../data/static_tfs"
 gtPath = "../data/gt"
-visualisationPath = "../visualisation/eval-temporal-s"
+visualisationPath = "../visualisation/eval-mask-s"
 
 if datasetPath[-1] == "/":
     datasetPath = datasetPath[:-1]
@@ -112,7 +112,7 @@ def evaluateFile(filename):
         detectionThreshold = 0.5
 
         #confusion matrix
-        detections = copy.deepcopy(data["extrapolated"][dataFrameIdx])
+        detections = copy.deepcopy(data["maskrcnn"][dataFrameIdx])
         gts = copy.deepcopy(frameAnnotations)[1:]
 
         for rng in tp_range.keys():
@@ -154,6 +154,7 @@ def evaluateFile(filename):
                 dy = gt[1] - j[1]
                 diff = ((dx**2) + (dy**2))**0.5
                 if diff < detectionThreshold :
+                    print("tes!")
                     jo = j[2] % (math.pi*2)
                     gto = gt[2] % (math.pi*2)
                     diff = abs(jo-gto)
@@ -223,11 +224,12 @@ def evaluateFile(filename):
         else:
             precision_range[val] = tp_range[val] / (tp_range[val]+fp_range[val])
         lastVal = val
-    precision = tp_range[lastVal] / (tp_range[lastVal] + fp_range[lastVal])
-    recall = tp_range[lastVal] / (tp_range[lastVal] + fn_range[lastVal])
     tp = tp_range[lastVal]
     fn = fn_range[lastVal]
     fp = fp_range[lastVal]
+    print(tp, fn, fp)
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
 
     blanksRecall = [x for x in recall_range.keys() if recall_range[x] == None]
     blanksPrecision = [x for x in precision_range.keys() if precision_range[x] == None]
