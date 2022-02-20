@@ -61,12 +61,11 @@ class Converter(multiprocessing.Process):
             box = self.data[0]["boxes"][idx]
             label = self.data[0]["labels"][idx]
             score = self.data[0]["scores"][idx]
-            mask = self.data[0]["masks"][idx][0]
+            mask = self.data[0]["masks"][idx]
 
             x = (float(box[0]) + float(box[2])) / 2
             y = (float(box[1]) + float(box[3])) / 2
 
-            #mask = mask.detach().cpu().numpy()
             mask = mask[math.floor(box[1]):math.ceil(box[3]), math.floor(box[0]):math.ceil(box[2])]
 
             coords = []
@@ -88,7 +87,8 @@ class Converter(multiprocessing.Process):
             #import sys
             #sys.exit(0)
 
-            annotation = [x, y, rot]
+            scale = 1024
+            annotation = [x/scale, y/scale, rot]
             annotations.append(annotation)
         self.annotations = annotations
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
                 if ".annotations." not in filename:
                     jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 24
+    cpuCores = 10
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
@@ -109,7 +109,11 @@ if __name__ == "__main__":
             jobs[i].start()
         else:
             for j in range(limit):
-                jobs[j].join()
+                try:
+                    jobs[j].join()
+                except ValueError:
+                    pass
+                jobs[j].close()
             limit += batch
             jobs[i].start()
 
@@ -117,16 +121,20 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-12:] == ".annotations":
-                if filename.split(".")[0] not in combinableFilenames:
-                    combinableFilenames.append(filename.split(".")[0])
-
+                combinableFilenames.append(os.path.join(files[0], filename.split(".")[0]))
+    combinableFilenames = list(set(combinableFilenames))
+                    
     for base in combinableFilenames:
+
+        print("Combining bag", base)
+        modelPath = base.split("/")[-2]
+        print(modelPath)
 
         #open combinable file
         combineFile = ""
         for files in os.walk(combinePath):
             for filename in files[2]:
-                if filename.split(".")[0] == base:
+                if filename.split(".")[0] == base.split("/")[-1]:
                     combineFile = filename
                     break
 
@@ -142,30 +150,30 @@ if __name__ == "__main__":
         for files in os.walk(datasetPath):
             for filename in files[2]:
                 if filename[-12:] == ".annotations":
-                    if filename.split(".")[0] == base:
+                    if filename.split(".")[0] == base.split("/")[-1]:
                         readyFiles.append(filename)
 
-        print(len(readyFiles), len(data["ts"])
-        if len(readyFiles) != len(data["ts"]):
-            print("Warning, frame mismatch", base)
+        print(len(readyFiles), len(data["ts"]))
+        #if len(readyFiles) != len(data["ts"]):
+        #    print("Warning, frame mismatch", base)
 
         data["maskrcnn"] = []
-        for i in range(len(readyFiles)):
-            data["maskrcnn"].append(None)
+        for i in range(len(data["scans"])):
+            data["maskrcnn"].append([])
 
         #open each file, add it to the correct frame
         for filename in readyFiles:
             idx = int(filename.split(".pickle-")[1].split(".")[0])
-            with open(os.path.join(datasetPath, readyFiles), "rb") as f:
+            with open(os.path.join(datasetPath, modelPath, filename), "rb") as f:
                 annotations = pickle.load(f)
                 data["maskrcnn"][idx] = annotations
         
-        for i in range(len(readyFiles)):
-            if data["maskrcnn"][i] == None:
-                print("Warning, empty frame found")
+        #for i in range(len(readyFiles)):
+        #    if data["maskrcnn"][i] == None:
+        #        print("Warning, empty frame found")
 
-        os.makedirs(combinedOutPath, exist_ok=True)
-        with open(os.path.join(combinedOutPath, base + ".pickle"), "wb") as f:
+        os.makedirs(os.path.join(combinedOutPath, modelPath), exist_ok=True)
+        with open(os.path.join(combinedOutPath, modelPath, base.split("/")[-1] + ".bag.pickle"), "wb") as f:
             pickle.dump(data, f, protocol=2)
 
     

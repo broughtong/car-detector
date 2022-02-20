@@ -108,19 +108,19 @@ def main():
     model.to(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+    optimizer = torch.optim.SGD(params, lr=0.0005, momentum=0.9, weight_decay=0.0005)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
-    num_epochs = 1
+    num_epochs = 10
 
     for epoch in range(num_epochs):
         train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=1)
         lr_scheduler.step()
         evaluate(model, data_loader_test, device=device)
 
-    modelpath = datetime.datetime.now().strftime("models/%d-%m-%y-%H_%M.pth")
-    os.makedirs("./models", exist_ok=True)
-    torch.save(model, modelpath)
+        modelpath = datetime.datetime.now().strftime("models/%d-%m-%y-%H_%M_%S.pth")
+        os.makedirs("./models", exist_ok=True)
+        torch.save(model, modelpath)
 
     print("Finished")
     
