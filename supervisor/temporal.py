@@ -379,11 +379,13 @@ class Interpolator(multiprocessing.Process):
 
     def lerp(self, a, b, i, rot=False):
         if rot:
-            if abs(a - b) > 3.1415:
+            a = a % math.pi
+            b = b % math.pi
+            if abs(a - b) > (math.pi/2):
                 if a < b:
-                    a += 6.283
+                    a += math.pi
                 else:
-                    b += 6.283
+                    b += math.pi
         return a + i * (b - a)
 
 if __name__ == "__main__":
