@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 datasetPath = "../data/results/simple-s"
-outputPath = "../data/results/temporal-s"
+outputPath = "../data/results/temporal-s3"
 visualisationPath = "../visualisation/temporal-s"
 
 @contextmanager
@@ -32,9 +32,9 @@ class Interpolator(multiprocessing.Process):
 
         self.filename = filename
         self.path = path
-        self.smallDetectionTimeout = 25 #requires two detections in this time to begin lerp
-        self.detectionDistance = 0.85
-        self.extrapolateTime = 6
+        self.smallDetectionTimeout = 200 #requires two detections in this time to begin lerp
+        self.detectionDistance = 0.4
+        self.extrapolateTime = 200
 
     def run(self):
 
@@ -394,7 +394,7 @@ if __name__ == "__main__":
             if filename[-7:] == ".pickle":
                 jobs.append(Interpolator(files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 4
+    cpuCores = 3
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

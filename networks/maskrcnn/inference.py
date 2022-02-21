@@ -11,7 +11,7 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-modelName = "./models/19-02-22-03_03.pth"
+modelName = "./models/e10.pth"
 resultsPath = "../../data/results/maskrcnn_raw"
 datasetPath = "../../annotations/maskrcnn/evaluation/imgs"
 
@@ -59,21 +59,22 @@ def main():
         result = model(img)
 
         masks = []
+        labels = []
+        scores = []
+        boxes = []
         for idx in range(len(result[0]["masks"])):
             masks.append(result[0]["masks"][idx][0].detach().cpu().numpy())
+            labels.append(result[0]["labels"][idx].detach().cpu().numpy)
+            scores.append(result[0]["scores"][idx].detach().cpu().numpy)
+            boxes.append(result[0]["boxes"][idx].detach().cpu().numpy)
         result[0]["masks"] = masks
+        result[0]["labels"] = labels
+        result[0]["scores"] = scores
+        result[0]["boxes"] = boxes
 
         resultfn = os.path.join(resultsPath, modelName.split("/")[-1], imgfn + ".pickle")
         with open(resultfn, "wb") as f:
             pickle.dump(result, f, protocol=2)
-
-    """
-    img = np.array(result[0]["masks"][0][0].detach().cpu().numpy())
-    for row in range(len(img)):
-        for val in range(len(img)):
-            img[row][val] = (img[row][val])*255
-    cv2.imwrite("et.png", img)
-    """
 
 if __name__ == "__main__":
     main()
