@@ -5,4 +5,5 @@ evaluation/results
 models
 *.swo
 *.swp
+supervisor/lanoising/models
 __pycache__

@@ -16,8 +16,13 @@ To evaluate the results of this only, run evaluation/simple.py
 Run supervisor/temporal.py to run the temporal filter
 If you wish to analyse the results of the temporal filter, run evaluation/temporal.py
 
-If you wish to run the weather simulate on the results, run supervisor/augment.py
-Run supervisor/annotator.py to create annotations.
+You will need the weather simulator network models, explained on the simulator page.
+The origal page is here https://github.com/cavayangtao/lanoising
+And a mirror is provided here: https://github.com/broughtong/lanoising
+Copy the models into supervisor/lanoising/models/
+Run the lanoising weather simulator in supervisor/lanoising/lanoising.py
+
+Run supervisor/annotator_mask.py to create annotations.
 Run supervisor/datasetDivision.py to break the images into training/testing/evaluation subset by rosbag (all bags with gt go to eval)
 
 # Train the networks
