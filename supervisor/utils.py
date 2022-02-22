@@ -2,7 +2,7 @@ import cv2
 import math
 import numpy as np
 
-def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None):
+def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
 
     res = 1024
     scale = 25
@@ -97,6 +97,9 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
             img[x+int(res/2)-1, y+int(res/2)-1] = otherColours[point]
         except:
             pass
+
+    if renderAnnotations:
+        cv2.putText(img, "%s cars" % (str(len(cars))), (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 3, 50)
 
     cv2.imwrite(filename, img)
 
