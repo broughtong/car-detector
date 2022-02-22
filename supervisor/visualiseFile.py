@@ -58,7 +58,7 @@ class Visualiser(multiprocessing.Process):
 
             os.makedirs(visualisationPath, exist_ok=True)
             fn = os.path.join(visualisationPath, "%s-%s-%s.png" % ("interpolated", self.filename, self.fileCounter))
-            utils.drawImgFromPoints(fn, points, [], [], temporal, raw)
+            utils.drawImgFromPoints(fn, points, [], [], temporal, raw, renderAnnotations=True)
             self.fileCounter += 1
 
 if __name__ == "__main__":
