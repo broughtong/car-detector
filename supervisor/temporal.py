@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import utils
 import rospy
 import pickle
 import math
@@ -80,19 +81,6 @@ class Interpolator(multiprocessing.Process):
             annotationsOdom.append(detections)
         with suppress_stdout_stderr():
             annotationsOdom = np.array(annotationsOdom)
-
-        """
-        for anno in annotationsOdom:
-            for d in anno:
-                dx = math.cos(d[1])
-                dy = math.sin(d[1])
-                plt.arrow(float(d[0]), float(d[1]), dx, dy, head_width=0.45, head_length=0.5)
-
-        ax = plt.gca()
-        ax.set_xlim([-10, 100])
-        ax.set_ylim([-20, 100])
-        plt.show()
-        """
 
         #if two detections close to each other in odom frame inside some temporal window
         #lerp between them
@@ -290,92 +278,14 @@ class Interpolator(multiprocessing.Process):
             for j in range(len(extrapolatedOnly[i])):
                 dets.append([extrapolatedOnly[i][j][0], extrapolatedOnly[i][j][1]])
                 colours.append([0, 255, 0])
-            self.pointsToImgsDrawWheels(points, "interpolated", dets, colours)
+
+            annotations = self.data["extrapolated"][i]
+
+            #self.pointsToImgsDrawWheels(points, "interpolated", dets, colours)
+            os.makedirs(visualisationPath, exist_ok=True)
+            fn = os.path.join(visualisationPath, "%s-%s-%s.png" % ("interpolated", self.filename, self.fileCounter))
+            utils.drawImgFromPoints(fn, points, dets, colours, annotations)
             self.fileCounter += 1
-
-        #lets test it i suppose
-        """
-        lerped = self.data["lerped"]
-        anodom = []
-        for idx in range(len(scans)):
-            mat = np.array(trans[idx])
-            r = R.from_matrix(mat[:3, :3])
-            yaw = r.as_euler('zxy', degrees=False)
-            yaw = yaw[0]
-            detections = []
-
-            for det in range(len(lerped[idx])):
-                point = np.array([*lerped[idx][det][:2], 0, 1])
-                point = np.matmul(mat, point)
-                point = list(point[:2])
-
-                orientation = lerped[idx][det][2] + yaw
-                detections.append([*point, orientation])
-
-            anodom.append(detections)
-        anodom = np.array(annotationsOdom)
-
-        for anno in anodom:
-            for d in anno:
-                dx = math.cos(d[1])
-                dy = math.sin(d[1])
-                plt.arrow(float(d[0]), float(d[1]), dx, dy, head_width=0.45, head_length=0.5)
-
-        ax = plt.gca()
-        ax.set_xlim([-10, 100])
-        ax.set_ylim([-20, 100])
-        #plt.show()
-        """
-
-    def pointsToImgsDrawWheels(self, points, location, wheels, colours):
-
-        res = 1024
-        scale = 25
-        accum = np.zeros((res, res, 3))
-        accum.fill(255)
-
-        for point in points:
-            x, y = point[:2]
-            x *= scale
-            y *= scale
-            x = int(x)
-            y = int(y)
-            try:
-                accum[x+int(res/2), y+int(res/2)] = [0, 0, 0]
-            except:
-                pass
-
-        for wheel in range(len(wheels)):
-            x, y = wheels[wheel][:2]
-            x *= scale
-            y *= scale
-            x = int(x)
-            y = int(y)
-            try:
-                accum[x+int(res/2), y+int(res/2)] = colours[wheel]
-            except:
-                pass
-
-            try:
-                accum[x+int(res/2)+1, y+int(res/2)+1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)+1, y+int(res/2)-1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)-1, y+int(res/2)+1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)-1, y+int(res/2)-1] = colours[wheel]
-            except:
-                pass
-        fn = os.path.join(visualisationPath, "%s-%s-%s.png" % (location, self.filename, self.fileCounter))
-        #location + "-" + self.filename + "-" + str(self.fileCounter) + ".png")
-        os.makedirs(visualisationPath, exist_ok=True)
-        cv2.imwrite(fn, accum)
 
     def lerp(self, a, b, i, rot=False):
         if rot:
