@@ -2,7 +2,7 @@ import cv2
 import math
 import numpy as np
 
-def drawImgFromPoints(filename, points, otherPoints, otherColours, cars, dilation=None):
+def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None):
 
     res = 1024
     scale = 25
@@ -11,10 +11,13 @@ def drawImgFromPoints(filename, points, otherPoints, otherColours, cars, dilatio
 
     for car in cars:
 
-        angle = car[2] % (math.pi * 2)
+        car[0] = int((car[0] * scale) + (res/2))
+        car[1] = int((car[1] * scale) + (res/2))
+
+        angle = car[2] % math.pi
         alpha = math.cos(angle) * 0.5
         beta = math.sin(angle) * 0.5
-        width, height = int(2.3*scale), int(4.5*scale)
+        width, height = int(4.5*scale), int(2.3*scale)
 
         a = [int(car[1] + alpha * height - beta * width), int(car[0] - beta * height - alpha * width)]
         b = [int(car[1] - alpha * height - beta * width), int(car[0] + beta * height - alpha * width)]
@@ -25,8 +28,32 @@ def drawImgFromPoints(filename, points, otherPoints, otherColours, cars, dilatio
         cv2.fillPoly(img, pts=[contours], color=[255, 0, 255])
 
         arrowLength = 50
-        end = [int(car[0]+arrowLength*math.sin(car[2])), int(car[1]-arrowLength*math.cos(car[2]))]
-        img = cv2.arrowedLine(img, tuple(car[:2]), tuple(end), [0, 0, 255], 2, 1)
+        start = [int(car[1]), int(car[0])]
+        end = [int(car[1]-arrowLength*math.sin(car[2])), int(car[0]-arrowLength*math.cos(car[2]))]
+        img = cv2.arrowedLine(img, tuple(start), tuple(end), [255, 0, 0], 2, 1)
+
+    for car in cars2:
+
+        car[0] = int((car[0] * scale) + (res/2))
+        car[1] = int((car[1] * scale) + (res/2))
+
+        angle = car[2] % (math.pi * 2)
+        alpha = math.cos(angle) * 0.5
+        beta = math.sin(angle) * 0.5
+        width, height = int(4.5*scale), int(2.3*scale)
+
+        a = [int(car[1] + alpha * height - beta * width), int(car[0] - beta * height - alpha * width)]
+        b = [int(car[1] - alpha * height - beta * width), int(car[0] + beta * height - alpha * width)]
+        c = [int(2 * car[1] - a[0]), int(2 * car[0] - a[1])]
+        d = [int(2 * car[1] - b[0]), int(2 * car[0] - b[1])]
+
+        contours = np.array([a, b, c, d])
+        cv2.fillPoly(img, pts=[contours], color=[0, 255, 0])
+
+        arrowLength = 50
+        start = [int(car[1]), int(car[0])]
+        end = [int(car[1]-arrowLength*math.sin(car[2])), int(car[0]-arrowLength*math.cos(car[2]))]
+        img = cv2.arrowedLine(img, tuple(start), tuple(end), [255, 0, 0], 2, 1)
 
     for point in points:
         x, y = point[:2]
