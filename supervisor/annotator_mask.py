@@ -51,7 +51,7 @@ class Annotator(multiprocessing.Process):
 
     def pointsToImgsDrawWheels(self, points, location, frame, wheels, colours):
 
-        res = 1024
+        res = 512
         scale = 20
         accum = np.zeros((res, res, 3))
         accum.fill(255)
@@ -95,8 +95,17 @@ class Annotator(multiprocessing.Process):
             except:
                 pass
 
+        kernel = np.ones((3, 3), 'uint8')
+        dilate_img = cv2.erode(accum,kernel,iterations = 1)
+        #dilate_img = cv2.dilate(accum, kernel, iterations=1)
+
         fn = os.path.join(outputPath, location, self.filename + "-" + str(frame) + ".png")
-        cv2.imwrite(fn, accum)
+        #cv2.imwrite(fn, accum)
+        #cv2.imshow("n", accum)
+        #cv2.waitKey(0)
+        #cv2.imshow("n", dilate_img)
+        #cv2.waitKey(0)
+        cv2.imwrite(fn, dilate_img)
 
         return accum
 
@@ -126,9 +135,30 @@ class Annotator(multiprocessing.Process):
         debugimg[c[0], c[1]] = [125, 255, 0]
         debugimg[d[0], d[1]] = [125, 255, 0]
 
+    def testImg(img):
+
+        mask = np.array(img)
+        obj_ids = np.unique(mask)
+        obj_ids = obj_ids[1:]
+
+        masks = mask == obj_ids[:, None, None]
+
+        num_objs = len(obj_ids)
+        boxes = []
+        for i in range(num_objs):
+            pos = np.where(masks[i])
+            xmin = np.min(pos[1])
+            xmax = np.max(pos[1])
+            ymin = np.min(pos[0])
+            ymax = np.max(pos[0])
+
+            if xmin == xmax or ymin == ymax:
+                return True
+        return False
+
     def drawAnnotation(self, img, frame, annotations):
         
-        res = 1024
+        res = 512
         scale = 20
         ctr = 0
 
@@ -144,6 +174,9 @@ class Annotator(multiprocessing.Process):
 
                 self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img)
                 fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + "-" + str(ctr) + ".png")
+                if testImg(accum):
+                    return True
+
                 cv2.imwrite(fn, accum)
                 ctr += 1
 
@@ -156,7 +189,11 @@ class Annotator(multiprocessing.Process):
                 self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img, annotationIdx)
                 annotationIdx += 1
             fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
+            if testImg(accum):
+                return True
             cv2.imwrite(fn, accum)
+
+        return False
 
     def annotate(self):
 
@@ -181,9 +218,11 @@ class Annotator(multiprocessing.Process):
 
             annotations = self.data[annotationSource][frame]
             if len(annotations) > 0:
+                
+                badAnnotation = self.drawAnnotation(img, frame, annotations)
+                if badAnnotation:
+                    continue
                 img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
-
-                self.drawAnnotation(img, frame, annotations)
 
                 fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
                 cv2.imwrite(fn, img)
