@@ -20,7 +20,10 @@ You will need the weather simulator network models, explained on the simulator p
 The origal page is here https://github.com/cavayangtao/lanoising
 And a mirror is provided here: https://github.com/broughtong/lanoising
 Copy the models into supervisor/lanoising/models/
+
 Run the lanoising weather simulator in supervisor/lanoising/lanoising.py
+I dumped the conda environment into the env.yaml file
+You can load it with conda create -f env.yaml
 
 Run supervisor/annotator_mask.py to create annotations.
 Run supervisor/datasetDivision.py to break the images into training/testing/evaluation subset by rosbag (all bags with gt go to eval)
