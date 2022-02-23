@@ -22,7 +22,9 @@ from tensorflow.python.keras.backend import set_session
 
 lp = lg.LaserProjection()
 
-datasetPath = "../result/interpolated"
+datasetPath = "../../data/results/temporal-s"
+outputPath = "../../data/results/lanoising"
+os.makedirs(outputPath, exist_ok=True)
 
 # functions for MDN
 def elu_modif(x, a=1.):
@@ -100,7 +102,7 @@ def callback_ls(msg):
 
 def processBag(path, filename):
 
-    print("openging %s %s" % (path, filename))
+    print("Opening %s %s" % (path, filename))
     data = []
     with open(os.path.join(path, filename), "rb") as f:
         data = pickle.load(f)
@@ -118,8 +120,8 @@ def processBag(path, filename):
         newScans.append(frm)
     data["lanoising"] = newScans
 
-    os.makedirs("../result/lanoise/", exist_ok=True)
-    with open(os.path.join("../result/lanoise", filename), "wb") as f:
+    print("Saving File %s %s" % (path, filename))
+    with open(os.path.join(outputPath, filename), "wb") as f:
         pickle.dump(data, f, protocol=2)
 
 sess = tf.Session()
