@@ -1,8 +1,12 @@
 import cv2
 import math
 import numpy as np
+import copy
 
 def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
+
+    cars = copy.deepcopy(cars)
+    cars2 = copy.deepcopy(cars2)
 
     res = 1024
     scale = 25
