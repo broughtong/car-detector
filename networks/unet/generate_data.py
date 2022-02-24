@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 labels_out = np.empty((0, 1526))
-data_out = np.empty((0, 1526, 3))
+data_out = np.empty((0, 1526, 2))
 
 datasetPath = "../../data/results/lanoising-ts4"
 scanField = "lanoise"
@@ -35,22 +35,22 @@ class DataGenerator:
         self.W = 512
         self.resolution = 0.075
 
-        self.length = 4
-        self.width = 2.2
+        self.length = 4.5
+        self.width = 2.3
 
         self.labels_out = np.empty((0, self.n_points))
-        self.data_out = np.empty((0, self.n_points, 3))
+        self.data_out = np.empty((0, self.n_points, 2))
 
         self.tmp_cars = []
 
     def generate(self):
         n = len(self.data[scanField])
-        scans = ["sick_back_right", "sick_back_left", "sick_back_middle"]
+        scans = ["sick_back_right", "sick_back_left", "sick_back_middle", "sick_front"]
 
-        for i in range(0, n):
+        for i in range(n):
             print("Processing frame {}/{}". format(i, n-1))
             self.init_lines(i)
-            data = np.empty((0, 3))
+            data = np.empty((0, 2))
             labels = np.empty(0)
 
             for scan_id, lidar in enumerate(scans):
@@ -58,11 +58,11 @@ class DataGenerator:
                     point = self.data[scanField][i][lidar][j]
                     labels = np.hstack((labels, self.is_car(point, scan_id)))
                     point[2] = 0.3 * scan_id + 0.4
-                    data = np.vstack((data, point[:3]))
+                    data = np.vstack((data, point[:2]))
 
             # add zero positions to have fixed number of points in the frame
             for _ in range(self.n_points - len(data)):
-                data = np.vstack((data, np.array([0., 0., 0.])))
+                data = np.vstack((data, np.array([0., 0.])))
                 labels = np.hstack((labels, -1))
 
             # rotate the frame multiple times and save it
