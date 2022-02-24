@@ -1,4 +1,4 @@
-generate_data_carloc.py
+generate_data.py
 - for generating h5py files from pickle files
 - example code is in the bottom
 - loop through bags that should be regenerated (in code array "bags")
