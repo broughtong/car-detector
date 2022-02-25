@@ -14,10 +14,10 @@ from matplotlib.patches import Polygon
 labels_out = np.empty((0, 1526))
 data_out = np.empty((0, 1526, 2))
 
-datasetPath = "../../data/results/lanoising"
-datasetPath = "/home/george/car-detector/code/result/lanoise"
-scanField = "lanoising"
-
+datasetPath = "../data/results/lanoising-ts5"
+scanField = "scans"
+outputPath = "./bags/" + datasetPath.split("/")[-1] + "-" + scanField
+os.makedirs(outputPath, exist_ok=True)
 
 class DataGenerator:
     def __init__(self, filename, target_path, version="extrapolated"):
@@ -284,6 +284,15 @@ if __name__ == "__main__":
             break
     print(bags)
 
+    for files in os.walk(outputPath):
+        for filename in files[2]:
+            if filename[:-3] in bags:
+                idx = bags.index(filename[:-3])
+                del bags[idx]
+
+    print("Some bags maybe skipped")
+    print(bags)
+
     #usebags = []
     #for i in bags:
     #    if i in goodbags:
@@ -295,14 +304,12 @@ if __name__ == "__main__":
     #    print(usebags[i])
 
     for i in range(len(bags)):
-        gen = DataGenerator(os.path.join(datasetPath, bags[i]), "bags/janota_regenerated/"+bags[i])
+        gen = DataGenerator(os.path.join(datasetPath, bags[i]), os.path.join(outputPath, bags[i]))
         gen.generate()
-        if i > 5:
-            break
 
-    print(data_out.shape)
-    f = h5py.File("bags/janota_regenerated/dataset" + ".h5", 'w')
-    lab = f.create_dataset("labels", data=labels_out)
-    dat = f.create_dataset("data", data=data_out)
-    f.close()
+    #print(data_out.shape)
+    #f = h5py.File("bags/janota_regenerated/dataxset" + ".h5", 'w')
+    #lab = f.create_dataset("labels", data=labels_out)
+    #dat = f.create_dataset("data", data=data_out)
+    #f.close()
 
