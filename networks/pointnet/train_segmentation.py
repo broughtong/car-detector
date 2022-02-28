@@ -51,9 +51,9 @@ opt = parser.parse_args()
 # init dataset
 data_path = "../../../../datafast/janota/lanoising-ts4-"
 if opt.lanoise:
-	data_path += "scans"
-else:
 	data_path += "lanoising"
+else:
+	data_path += "scans"
 trn_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024, normalize=opt.normalize, trn=True)
 val_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024, normalize=opt.normalize, trn=False)
 trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=opt.bs, shuffle=True)
@@ -73,8 +73,8 @@ except OSError:
 log_file = '%s/log.txt' % opt.outf
 f = open(log_file, 'a+')
 f.write("bs: {}, n_epochs: {}, lr: {}, feature_trans: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, "
-        "numc: {}, normalize: {}\n".format(opt.bs, opt.nepoch, opt.lr, opt.feature_transform, opt.optim, opt.momentum,
-        opt.weight_decay, opt.weight, opt.numc, opt.normalize))
+        "numc: {}, normalize: {}, lanoise {}\n".format(opt.bs, opt.nepoch, opt.lr, opt.feature_transform, opt.optim, opt.momentum,
+        opt.weight_decay, opt.weight, opt.numc, opt.normalize, opt.lanoise))
 f.close()
 
 # init model
