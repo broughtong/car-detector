@@ -14,10 +14,17 @@ from matplotlib.patches import Polygon
 labels_out = np.empty((0, 1526))
 data_out = np.empty((0, 1526, 2))
 
+rotationIndex = 2   # how many times rotate one frame
+testingIndex = 5    # ratio of saving to testing folder
+dimIndex = 4    # how many dimensions to keep (in order: 1. x-coord, 2. y-coord, 3. lidar pertinence, 4. intensity)
+
 datasetPath = "../data/results/lanoising-ts5"
 scanField = "scans"
 outputPath = "./bags/" + datasetPath.split("/")[-1] + "-" + scanField
 os.makedirs(outputPath, exist_ok=True)
+os.makedirs(os.path.join(outputPath, 'training'), exist_ok=True)
+os.makedirs(os.path.join(outputPath, 'testing'), exist_ok=True)
+
 
 class DataGenerator:
     def __init__(self, filename, target_path, version="extrapolated"):
@@ -26,6 +33,7 @@ class DataGenerator:
         with open(filename, "rb") as f:
             self.data = pickle.load(f)
         self.version = version
+        self.save_id = 0
 
         self.line_coefficients = []
         self.num_cars = 0
@@ -39,19 +47,18 @@ class DataGenerator:
         self.length = 4.5
         self.width = 2.3
 
-        self.labels_out = np.empty((0, self.n_points))
-        self.data_out = np.empty((0, self.n_points, 2))
-
         self.tmp_cars = []
 
     def generate(self):
+        print("Processing to target {}".format(self.target_path))
         n = len(self.data[scanField])
         scans = ["sick_back_right", "sick_back_left", "sick_back_middle", "sick_front"]
 
         for i in range(n):
-            print("Processing frame {}/{}". format(i, n-1))
+            if i % 100 == 0:
+                print("Processing frame {}/{}". format(i, n-1))
             self.init_lines(i)
-            data = np.empty((0, 2))
+            data = np.empty((0, dimIndex))
             labels = np.empty(0)
 
             for scan_id, lidar in enumerate(scans):
@@ -59,15 +66,10 @@ class DataGenerator:
                     point = self.data[scanField][i][lidar][j]
                     labels = np.hstack((labels, self.is_car(point, scan_id)))
                     point[2] = 0.3 * scan_id + 0.4
-                    data = np.vstack((data, point[:2]))
-
-            # add zero positions to have fixed number of points in the frame
-            for _ in range(self.n_points - len(data)):
-                data = np.vstack((data, np.array([0., 0.])))
-                labels = np.hstack((labels, -1))
+                    data = np.vstack((data, point[:dimIndex+1]))
 
             # rotate the frame multiple times and save it
-            for j in range(3):
+            for j in range(rotationIndex):
                 angle = math.radians(random.randrange(1, 360))
 
                 pc = copy.deepcopy(data)
@@ -75,13 +77,13 @@ class DataGenerator:
                 pc_out[:, 0] = pc[:, 0] * math.cos(angle) - pc[:, 1] * math.sin(angle)
                 pc_out[:, 1] = pc[:, 0] * math.sin(angle) + pc[:, 1] * math.cos(angle)
 
-                self.data_out = np.vstack((self.data_out, [pc_out]))
-                self.labels_out = np.vstack((self.labels_out, labels))
+                self.save_np(pc_out, labels)
+                self.save_id += 1
 
                 # visualize one of rotated frames with corresponding BB for cars
-                # plt.figure()
-                # plt.scatter(pc_out[labels != -1, 0], pc_out[labels != -1, 1], color='red')
-                # plt.scatter(pc_out[labels == -1, 0], pc_out[labels == -1, 1], color='black')
+                '''plt.figure()
+                plt.scatter(pc_out[labels != -1, 0], pc_out[labels != -1, 1], color='red')
+                plt.scatter(pc_out[labels == -1, 0], pc_out[labels == -1, 1], color='black')
                 for j in range(len(self.tmp_cars)):
 
                     px = self.tmp_cars[j][0]
@@ -90,16 +92,16 @@ class DataGenerator:
                     py1 = px*math.sin(angle)+py*math.cos(angle)
                     angle1 = self.tmp_cars[j][2] + angle
 
-                    # plt.scatter(px1, py1, color='yellow', s=100)
+                    plt.scatter(px1, py1, color='yellow', s=100)
                     corners = self.get_corners_of_rectangle_reentrant(px1, py1, angle1)
                     corners[[2, 3]] = corners[[3, 2]]
-                    # poly = Polygon(corners, facecolor='none', edgecolor='red')
-                    # plt.gca().add_patch(poly)
-                # plt.gca().set_aspect('equal', adjustable='box')
-                # plt.draw()
-                # plt.show()
+                    poly = Polygon(corners, facecolor='none', edgecolor='red')
+                    plt.gca().add_patch(poly)
+                plt.gca().set_aspect('equal', adjustable='box')
+                plt.draw()
+                plt.show()'''
 
-        self.save_h5()
+        # self.save_h5()
         # self.stack_to_global()
 
     def init_lines(self, i):
@@ -261,6 +263,11 @@ class DataGenerator:
         dat = f.create_dataset("data", data=self.data_out)
         f.close()
 
+    def save_np(self, pc_out, labels):
+        # np.save(os.path.join(self.target_path, str(self.save_id) + "pc.npy"), pc_out, allow_pickle=False)
+        # np.save(os.path.join(self.target_path, str(self.save_id) + "l.npy"), labels, allow_pickle=False)
+        np.savez(os.path.join(self.target_path, str(self.save_id) + ".npz"), pc=pc_out, labels=labels, allow_pickle=False)
+
     def stack_to_global(self):
         global data_out, labels_out
         data_out = np.vstack((data_out, self.data_out))
@@ -282,7 +289,7 @@ if __name__ == "__main__":
         if folders[0] == datasetPath:
             bags = folders[2]
             break
-    print(bags)
+    # print(bags)
 
     for files in os.walk(outputPath):
         for filename in files[2]:
@@ -290,7 +297,7 @@ if __name__ == "__main__":
                 idx = bags.index(filename[:-3])
                 del bags[idx]
 
-    print("Some bags maybe skipped")
+    # print("Some bags maybe skipped")
     print(bags)
 
     #usebags = []
@@ -304,12 +311,11 @@ if __name__ == "__main__":
     #    print(usebags[i])
 
     for i in range(len(bags)):
-        gen = DataGenerator(os.path.join(datasetPath, bags[i]), os.path.join(outputPath, bags[i]))
+        if i % testingIndex == 0:
+            target_dir = os.path.join(outputPath, 'testing', bags[i][:-11])     # [:-11] is used to discard extension .bag.pickle
+        else:
+            target_dir = os.path.join(outputPath, 'training', bags[i][:-11])
+        os.makedirs(target_dir, exist_ok=True)
+        gen = DataGenerator(os.path.join(datasetPath, bags[i]), target_dir)
         gen.generate()
-
-    #print(data_out.shape)
-    #f = h5py.File("bags/janota_regenerated/dataxset" + ".h5", 'w')
-    #lab = f.create_dataset("labels", data=labels_out)
-    #dat = f.create_dataset("data", data=data_out)
-    #f.close()
 
