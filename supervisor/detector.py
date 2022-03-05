@@ -35,8 +35,11 @@ class Annotator(multiprocessing.Process):
         
         print("Process spawned for file %s %s" % (self.path, self.filename))
 
-        with open(self.path + self.filename, "rb") as f:
-            self.data = pickle.load(f)
+        try:
+            with open(self.path + self.filename, "rb") as f:
+                self.data = pickle.load(f)
+        except:
+            return
 
         for idx in range(len(self.data["scans"])):
             scan = self.data["scans"][idx]
