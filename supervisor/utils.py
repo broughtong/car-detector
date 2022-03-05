@@ -1,7 +1,11 @@
 import cv2
+import multiprocessing
+import pickle
+import os
 import math
 import numpy as np
 import copy
+import multiprocessing
 
 def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
 
@@ -106,4 +110,60 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         cv2.putText(img, "%s cars" % (str(len(cars))), (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 3, 50)
 
     cv2.imwrite(filename, img)
+
+class Visualise(multiprocessing.Process):
+    def __init__(self, datasetPath, outPath, path, filename):
+        multiprocessing.Process.__init__(self)
+
+        self.filename = filename
+        self.path = path
+        self.fileCounter = 0
+        self.datasetPath = datasetPath
+        self.outPath = outPath
+
+    def run(self):
+        
+        print("Process spawned for file %s" % (self.filename), flush = True)
+
+        with open(os.path.join(self.path, self.filename), "rb") as f:
+            self.data = pickle.load(f)
+
+        for frameIdx in range(len(self.data["scans"])):
+            self.drawFrame(frameIdx)
+
+    def drawFrame(self, idx):
+
+        scans = self.data["scans"][idx]
+
+        try:
+            scans = np.concatenate([scans["sick_back_left"], scans["sick_back_right"], scans["sick_back_middle"], scans["sick_front"]])
+        except:
+            return
+
+        fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
+        drawImgFromPoints(fn, scans)
+
+if __name__ == "__main__":
+
+
+    datasetPath = "../data/extracted/"
+    outPath = "../visualisation/extractor"
+    os.makedirs(outPath, exist_ok=True)
+
+    jobs = []
+    for files in os.walk(datasetPath):
+        for filename in files[2]:
+            jobs.append(Visualise(datasetPath, outPath, files[0], filename))
+    print("Spawned %i processes" % (len(jobs)), flush = True)
+    maxCores = 1
+    limit = maxCores
+    batch = maxCores
+    for i in range(len(jobs)):
+        if i < limit:
+            jobs[i].start()
+        else:
+            for j in range(limit):
+                jobs[j].join()
+            limit += batch
+            jobs[i].start()
 
