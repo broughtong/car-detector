@@ -9,27 +9,32 @@ class UNetCarDataset(torch.utils.data.Dataset):
     def __init__(self, path, trn, H=512, W=512, resolution=0.075):
         super().__init__()
         self.path = path
- 
-        if trn:
-            trn = "trn"
-        else:
-            trn = "val"
-        with open(trn + "_list.txt") as f:
-            self.data = f.readlines()
-    
         self.H = H
         self.W = W
         self.resolution = resolution
 
-    def __getitem__(self, index):
-        file = self.data[index]
-        file = file.split("_")
-        idx = int(file[1])
-        file = file[0]
+        if trn:
+            self.path = path + "/training"
+        else:
+            self.path = path + "/testing"
 
-        file = self.path + "/" + file
-        point_set = np.copy(np.load(file + ".points.npy", mmap_mode="r")[idx])
-        label = np.copy(np.load(file + ".labels.npy", mmap_mode="r")[idx])
+        self.bags = os.listdir(self.path)
+        self.cumul_num_frames = np.zeros(len(self.bags), dtype=int)
+        self.count_frames()
+
+        print(self.bags)
+
+    def count_frames(self):
+        for i in range(len(self.bags)):
+            self.cumul_num_frames[i] = sum(self.cumul_num_frames[:i]) + len(os.listdir(self.path + "/" + self.bags[i]))
+
+    def __getitem__(self, index):
+        bag_id = np.min(np.nonzero(index < self.cumul_num_frames))
+        index = index - (self.cumul_num_frames[bag_id - 1] if bag_id > 0 else 0)
+
+        with np.load(self.path + "/" + self.bags[bag_id] + "/" + str(index) + ".npz", mmap_mode="r") as f:
+            point_set = f['pc']
+            label = f['labels']
         
         indices = ~((point_set[:, 0] == 0.0) & (point_set[:, 1] == 0.0) & (label == -1))
         point_set = point_set[indices, :]
@@ -60,4 +65,4 @@ class UNetCarDataset(torch.utils.data.Dataset):
         return grid, grid_labels
 
     def __len__(self):
-        return len(self.data)
+        return self.cumul_num_frames[-1]

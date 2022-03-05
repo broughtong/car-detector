@@ -60,9 +60,9 @@ device = get_device(opt.gpu)
 # new datasets
 data_path = "/datafast/janota/lanoising-ts4-"
 if opt.lanoise:
-	data_path += "scans"
-else:
 	data_path += "lanoising"
+else:
+	data_path += "scans"
 
 trn_dataset = UNetCarDataset(path=data_path, trn=True)
 val_dataset = UNetCarDataset(path=data_path, trn=False)
