@@ -3,6 +3,8 @@ annotations
 visualisation
 evaluation/results
 models
+networks/bags/
+networks/unet/bags/
 *.swo
 *.swp
 supervisor/lanoising/models

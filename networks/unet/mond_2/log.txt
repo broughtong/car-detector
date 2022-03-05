@@ -1,0 +1,1 @@
+bs: 32, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False

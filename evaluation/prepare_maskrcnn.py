@@ -101,7 +101,7 @@ if __name__ == "__main__":
                 if ".annotations." not in filename:
                     jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 10
+    cpuCores = 5
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

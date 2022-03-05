@@ -1,0 +1,17 @@
+bs: 32, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 32, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 64, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 52, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 45, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 50, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 32, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+Epoch: 000 	 Trn Loss: 0.08383 	 Val Loss: 0.26057
+training: CB = 4016403054, CN = 5357653, CC = 39512989, NB = 100842366027, NN = 251122462, NC = 2476314, BB = 4706217789, BN = 264189, BC = 43491, TOT = 109863763968validation: CB = 249209332, CN = 1159923, CC = 3678674, NB = 5703832454, NN = 18170786, NC = 107064, BB = 419893223, BN = 0, BC = 0, TOT = 6396051456bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+bs: 47, n_epochs: 15, lr: 0.001, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, lanoise: False
+Epoch: 001 	 Trn Loss: 0.03639 	 Val Loss: 0.27553
+training: CB = 1653660597, CN = 3044537, CC = 41052040, NB = 5060103614, NN = 253699746, NC = 980751, BB = 102851222659, BN = 21, BC = 3, TOT = 109863763968validation: CB = 59992008, CN = 1138859, CC = 3687692, NB = 81823074, NN = 18191849, NC = 98045, BB = 6231119927, BN = 1, BC = 1, TOT = 6396051456Epoch: 002 	 Trn Loss: 0.02750 	 Val Loss: 0.33264
+training: CB = 718378751, CN = 2328622, CC = 41318822, NB = 712209184, NN = 254415665, NC = 713960, BB = 108134398935, BN = 17, BC = 12, TOT = 109863763968validation: CB = 35567070, CN = 1139272, CC = 3699212, NB = 32254367, NN = 18191435, NC = 86526, BB = 6305113572, BN = 2, BC = 0, TOT = 6396051456
