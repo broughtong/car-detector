@@ -31,11 +31,6 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         contours = np.array([a, b, c, d])
         cv2.fillPoly(img, pts=[contours], color=[255, 0, 255])
 
-        arrowLength = 50
-        start = [int(car[1]), int(car[0])]
-        end = [int(car[1]-arrowLength*math.sin(car[2])), int(car[0]-arrowLength*math.cos(car[2]))]
-        img = cv2.arrowedLine(img, tuple(start), tuple(end), [255, 0, 0], 2, 1)
-
     for car in cars2:
 
         car[0] = int((car[0] * scale) + (res/2))
@@ -54,10 +49,25 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         contours = np.array([a, b, c, d])
         cv2.fillPoly(img, pts=[contours], color=[0, 255, 0])
 
+    for car in cars:
+
+        car[0] = int((car[0] * scale) + (res/2))
+        car[1] = int((car[1] * scale) + (res/2))
+
         arrowLength = 50
         start = [int(car[1]), int(car[0])]
         end = [int(car[1]-arrowLength*math.sin(car[2])), int(car[0]-arrowLength*math.cos(car[2]))]
         img = cv2.arrowedLine(img, tuple(start), tuple(end), [255, 0, 0], 2, 1)
+
+    for car in cars2:
+
+        car[0] = int((car[0] * scale) + (res/2))
+        car[1] = int((car[1] * scale) + (res/2))
+
+        arrowLength = 50
+        start = [int(car[1]), int(car[0])]
+        end = [int(car[1]-arrowLength*math.sin(car[2])), int(car[0]-arrowLength*math.cos(car[2]))]
+        img = cv2.arrowedLine(img, tuple(start), tuple(end), [255, 120, 0], 2, 1)
 
     for point in points:
         x, y = point[:2]
