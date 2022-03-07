@@ -43,13 +43,11 @@ class Annotator(multiprocessing.Process):
             trans = self.data["trans"][idx]
             ts = self.data["ts"][idx]
 
-            cars, cars_rel = self.processScan(scan)
+            cars = self.processScan(scan, method="strict")
             self.detections.append(cars)
-            self.relaxed.append(cars_rel)
             self.fileCounter += 1
         
         self.data["annotations"] = self.detections
-        self.data["annotations_rel"] = self.relaxed
         os.makedirs(outputPath, exist_ok=True)
         fn = os.path.join(outputPath, self.filename)
         with open(fn, "wb") as f:
@@ -58,7 +56,7 @@ class Annotator(multiprocessing.Process):
 
         print("Process finished for file %s" % (self.filename))
 
-    def processScan(self, scan):
+    def processScan(self, scan, method="strict"):
 
         #only uses 3 scans!
         # points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"]])
@@ -71,8 +69,10 @@ class Annotator(multiprocessing.Process):
 
         points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"]])
         middle_points = np.array(scan["sick_back_middle"])
-        cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
-        cars_relaxed = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
+        if method == "strict":
+            cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
+        elif method == "relaxed":
+            cars = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
 
         wheels = []
         colours = []
@@ -82,7 +82,7 @@ class Annotator(multiprocessing.Process):
     
         self.pointsToImgsDrawWheels(points, "car-estimates", wheels, colours)
 
-        return cars, cars_relaxed
+        return cars
 
     def detect_car_geometric(self, points, middle_points, min_wheels=4, splitting=False, use_bumper=True):
 
@@ -382,7 +382,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Annotator(files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 7
+    maxCores = 6
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):

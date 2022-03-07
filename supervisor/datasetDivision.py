@@ -2,15 +2,18 @@ import os
 
 testingSplit = 10 # 1bag in 10
 
-datasetPath = "../annotations/maskrcnn"
+datasetPath = "../annotations/maskrcnn-la"
 gtPath = "../data/gt"
 
 os.makedirs(os.path.join(datasetPath, "training", "imgs"), exist_ok=True)
 os.makedirs(os.path.join(datasetPath, "training", "annotations"), exist_ok=True)
+os.makedirs(os.path.join(datasetPath, "training", "debug"), exist_ok=True)
 os.makedirs(os.path.join(datasetPath, "testing", "imgs"), exist_ok=True)
 os.makedirs(os.path.join(datasetPath, "testing", "annotations"), exist_ok=True)
+os.makedirs(os.path.join(datasetPath, "testing", "debug"), exist_ok=True)
 os.makedirs(os.path.join(datasetPath, "evaluation", "imgs"), exist_ok=True)
 os.makedirs(os.path.join(datasetPath, "evaluation", "annotations"), exist_ok=True)
+os.makedirs(os.path.join(datasetPath, "evaluation", "debug"), exist_ok=True)
 
 #get list of rosbags with gt
 evalBags = []
@@ -80,3 +83,18 @@ for files in os.walk(os.path.join(datasetPath, "all", "annotations")):
             dst = os.path.join(datasetPath, "evaluation", "annotations", filename)
             os.symlink(src, dst)
 
+for files in os.walk(os.path.join(datasetPath, "all", "debug")):
+    for filename in files[2]:
+        bag = filename.split(".pickle")[0]
+        if bag in trainingBags:
+            src = os.path.join("../../", "all", "debug", filename)
+            dst = os.path.join(datasetPath, "training", "debug", filename)
+            os.symlink(src, dst)
+        elif bag in testingBags:
+            src = os.path.join("../../", "all", "debug", filename)
+            dst = os.path.join(datasetPath, "testing", "debug", filename)
+            os.symlink(src, dst)
+        elif bag in evalBags:
+            src = os.path.join("../../", "all", "debug", filename)
+            dst = os.path.join(datasetPath, "evaluation", "debug", filename)
+            os.symlink(src, dst)

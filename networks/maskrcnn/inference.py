@@ -11,7 +11,7 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-modelName = "./models/e10.pth"
+modelName = "./models/23-02-22-17_44_34.pth"
 resultsPath = "../../data/results/maskrcnn_raw"
 datasetPath = "../../annotations/maskrcnn/evaluation/imgs"
 
@@ -54,6 +54,7 @@ def main():
 
     imgs = list(os.listdir(datasetPath))
     for imgfn in imgs:
+        print(imgfn)
         path = os.path.join(datasetPath, imgfn)
         img = image_loader(path)
         result = model(img)
