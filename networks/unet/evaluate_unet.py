@@ -1,159 +1,170 @@
-#!/usr/bin/python
-import rospy
-import pickle
-import math
-import cv2
-import sys
+#!/usr/bin/env python
 import os
-import multiprocessing
+import os.path
+import sys
+import h5py
 import numpy as np
-from sklearn.cluster import DBSCAN
+import math
+import random
+import torch
+import pickle
 
-datasetPath = "../data/extracted/"
-outputPath = "../data/results/simple-s/"
-visualisationPath = "../visualisation/simple-s/"
+from model_unet import SmallerUnet
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+
+
 WIDTH = 1.5
 LENGTH = 2.5
 DIAGONAL = 3.1
 DIVISION_FACTOR = 5
 THRESHOLD = 0.3
 
+
 def euclidean_distance(x_1, x_2, y_1, y_2):
     return math.sqrt((x_1-x_2)*(x_1-x_2)+(y_1-y_2)*(y_1-y_2))
 
-class Annotator(multiprocessing.Process):
-    def __init__(self, path, filename):
-        multiprocessing.Process.__init__(self)
 
-        self.path = path
-        self.filename = filename
-        self.fileCounter = 0
-        self.detections = []
-        self.relaxed = []
+class EvaluatorPointNet:
+    def __init__(self, model_path, gpu=0):
+        self.device = self.get_device(gpu=gpu)
+        self.model = self.load_model(model_path)
+        print("UNet model loaded, device={}".format(self.device))
 
-    def run(self):
-        
-        print("Process spawned for file %s %s" % (self.path, self.filename))
+        self.H = 512
+        self.W = 512
+        self.resolution = 0.075
 
-        try:
-            with open(self.path + self.filename, "rb") as f:
-                self.data = pickle.load(f)
-        except:
+        self.data = np.empty((0, 3), dtype=np.float32)
+        self.indices = np.empty((0, 2), dtype=np.int8)
+        self.grid = torch.zeros([1, 3, self.H, self.W], dtype=torch.float32)
+        self.cars_out = []
+
+    def load_model(self, model_path):
+        model = SmallerUnet().to(self.device)
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        return model
+
+    def get_device(self, gpu=0):
+        if torch.cuda.is_available():
+            device = torch.device(gpu)
+        else:
+            device = 'cpu'
+        return device
+
+    def transform_input(self, data):
+        scans = ["sick_back_right", "sick_back_left", "sick_back_middle"]
+        self.data = np.empty((0, 3))
+        self.indices = np.empty((0, 2), dtype=np.int8)
+        self.grid = torch.zeros([1, 3, self.H, self.W], dtype=torch.float32)
+        self.cars_out = []
+
+        for scan_id, lidar in enumerate(scans):
+            sick_data = np.array(data[lidar])
+            if sick_data.shape[0] < 1:
+                continue
+            sick_data = sick_data[:, :3]
+            sick_data[:, 2] = 0.3 * scan_id + 0.4
+            self.data = np.vstack((self.data, sick_data))
+
+        center = np.mean(self.data[:, :2], axis=0)
+        for scan_id in range(3):
+            pts = self.data[self.data[:, 2] == 0.3 * scan_id + 0.4]
+            rows = np.expand_dims(np.ceil(self.H//2-1 - ((pts[:, 1] - center[1]) / self.resolution)), axis=1)
+            cols = np.expand_dims(np.ceil(self.W//2-1 + ((pts[:, 0] - center[0]) / self.resolution)), axis=1)
+            ids = np.nonzero(np.logical_and.reduce((rows[:, 0] >= 0, rows[:, 0] <= self.H - 1, cols[:, 0] >= 0, cols[:, 0] <= self.W - 1)))
+            rows = rows[ids].astype(int)
+            cols = cols[ids].astype(int)
+            self.grid[0][scan_id][rows[:, 0], cols[:, 0]] = 1
+            self.indices = np.vstack((self.indices, np.hstack((rows, cols))))
+
+        '''plt.figure()
+        plt.imshow(self.grid[0].permute(1, 2, 0))
+        plt.show()
+        input()'''
+
+    def evaluate(self, data):
+        self.transform_input(data)
+
+        with torch.no_grad():
+            self.model.eval()
+            output = self.model(self.grid.to(self.device))
+            output = torch.argmax(output, dim=1)
+            output = output[0].cpu()
+
+        pred = output[self.indices[:, 0], self.indices[:, 1]]
+        pred = torch.squeeze(torch.nonzero(pred)).to('cpu')
+        self.extract_wheels(pred)
+
+    def extract_wheels(self, pred, min_wheels=2, use_bumper=True):
+        points = self.data[pred]
+
+        dbscan = DBSCAN(eps=0.35, min_samples=3)
+        idxs = points[:, 2] == 1
+        if np.nonzero(np.logical_not(idxs))[0].shape[0] < 5:
             return
 
-        for idx in range(len(self.data["scans"])):
-            scan = self.data["scans"][idx]
-            trans = self.data["trans"][idx]
-            ts = self.data["ts"][idx]
-
-            cars = self.processScan(scan, method="strict")
-            self.detections.append(cars)
-            self.fileCounter += 1
-        
-        self.data["annotations"] = self.detections
-        os.makedirs(outputPath, exist_ok=True)
-        fn = os.path.join(outputPath, self.filename)
-        with open(fn, "wb") as f:
-            print("Writing to ", fn)
-            pickle.dump(self.data, f, protocol=2)
-
-        print("Process finished for file %s" % (self.filename))
-
-    def processScan(self, scan, method="strict"):
-
-        #only uses 3 scans!
-        # points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"]])
-        # cars = self.detectCarGeometry(points)
-
-        if len(scan["sick_back_middle"]) == 0:
-            return []
-        if len(scan["sick_back_left"]) == 0 or len(scan["sick_back_right"]) == 0:
-            return []
-
-        points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"]])
-        middle_points = np.array(scan["sick_back_middle"])
-        if method == "strict":
-            cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
-        elif method == "relaxed":
-            cars = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
-
-        wheels = []
-        colours = []
-        for i in cars:
-            wheels.append([i[0], i[1]])
-            colours.append([0, 255, 255])
-    
-        self.pointsToImgsDrawWheels(points, "car-estimates", wheels, colours)
-
-        return cars
-
-    def detect_car_geometric(self, points, middle_points, min_wheels=4, splitting=False, use_bumper=True):
-
-        dbscan = DBSCAN(eps=0.35, min_samples=5)
-        if min_wheels == 3:
-            dbscan = DBSCAN(eps=0.35, min_samples=2)
-
-        clustering = dbscan.fit_predict(points[:, :2])
-        clustering_middle = dbscan.fit_predict(middle_points[:, :2])
+        clustering = dbscan.fit_predict(points[np.logical_not(idxs), :2])
+        if np.nonzero(idxs)[0].shape[0] > 0:
+            clustering_middle = dbscan.fit_predict(points[idxs, :])
+        else:
+            clustering_middle = []
 
         num_clusters = np.unique(clustering)
         num_clusters = len(num_clusters[num_clusters != -1])
         num_clusters_middle = np.unique(clustering_middle)
         num_clusters_middle = len(num_clusters_middle[num_clusters_middle != -1])
-
         cluster_centers = np.empty((0, 3))
         parent_clusters = np.empty(0)
         cluster_centers_middle = np.empty((0, 3))
 
         # calculate centers of clusters from middle scanner
-        for i in range(num_clusters_middle):
-            cluster = middle_points[np.nonzero(clustering_middle == i)]
-            center = np.mean(cluster, axis=0)
+        for i in xrange(num_clusters_middle):
+            cluster = points[idxs]
+            cluster = cluster[np.nonzero(clustering_middle == i)]
+            # center = np.mean(cluster, axis=0)
+            center = cluster.mean(axis=0)
             cluster_centers_middle = np.vstack((cluster_centers_middle, [center[0], center[1], i]))
 
         # calculate centers of clusters from right/left scanners
-        for i in range(num_clusters):
-
-            cluster = points[np.nonzero(clustering == i)]
+        for i in xrange(num_clusters):
+            cluster = points[np.logical_not(idxs)]
+            cluster = cluster[np.nonzero(clustering == i)]
             diffs = (cluster - cluster[:, np.newaxis]) ** 2
             dists = np.sqrt(diffs[:, :, 0] + diffs[:, :, 1])  # dist matrix = sqrt((x_1 - y_1)**2 + (x_2- y_2)**2)
-            max_dist = np.max(dists)
+            # max_dist = np.max(dists)
+            max_dist = dists.max()
 
-            if splitting and (1 < max_dist < DIAGONAL) and (len(cluster) > 25):
+            if (1 < max_dist < DIAGONAL) and (len(cluster) > 25):
                 sub_cluster_size = int(math.ceil(len(cluster) / DIVISION_FACTOR))
                 decision_dists = dists[0]  # array of distances from the first point
                 indexes = np.argsort(decision_dists)
                 cluster = cluster[indexes]  # sort array of points according to distances
-                for j in range(DIVISION_FACTOR - 1):
+                for j in xrange(DIVISION_FACTOR - 1):
                     tmp = j * sub_cluster_size
-                    center = np.mean(cluster[tmp:tmp + sub_cluster_size, :], axis=0)
+                    # center = np.mean(cluster[tmp:tmp + sub_cluster_size, :], axis=0)
+                    center = cluster[tmp:tmp + sub_cluster_size, :].mean(axis=0)
                     cluster_centers = np.vstack((cluster_centers, [center[0], center[1], i]))
                     parent_clusters = np.append(parent_clusters, i)
                 tmp = (DIVISION_FACTOR - 1) * sub_cluster_size
-                center = np.mean(cluster[tmp:, :], axis=0)
+                # center = np.mean(cluster[tmp:, :], axis=0)
+                center = cluster[tmp:, :].mean(axis=0)
                 cluster_centers = np.vstack((cluster_centers, [center[0], center[1], i]))
                 parent_clusters = np.append(parent_clusters, i)
             else:
-                center = np.mean(cluster, axis=0)
+                # center = np.mean(cluster, axis=0)
+                center = cluster[:, :2].mean(axis=0)
                 cluster_centers = np.vstack((cluster_centers, [center[0], center[1], i]))
                 parent_clusters = np.append(parent_clusters, i)
 
-        cols = []
-        for i in range(len(cluster_centers)):
-            cols.append([0, 0, 255])
-
-        self.pointsToImgsDrawWheels(np.concatenate([points, middle_points]), "clusters-j", cluster_centers[:, :2], cols)
-
-        # **************** GEOMETRY FITTING PART ****************
         fragment_ids = np.negative(np.ones(len(cluster_centers), dtype=int))
         fragments = []
-
-        for j in range(len(cluster_centers)):
-            split = False
+        for j in xrange(len(cluster_centers)):
+            splitted = False
             if len(np.nonzero(parent_clusters == parent_clusters[j])) > 1:
-                split = True
-            for k in range(j + 1, len(cluster_centers)):
-                if split and len(np.nonzero(parent_clusters == parent_clusters[k])) > 1 and parent_clusters[j] != \
+                splitted = True
+            for k in xrange(j + 1, len(cluster_centers)):
+                if splitted and len(np.nonzero(parent_clusters == parent_clusters[k])) > 1 and parent_clusters[j] != \
                         parent_clusters[k]:
                     continue
                 d = euclidean_distance(cluster_centers[j][0], cluster_centers[k][0], cluster_centers[j][1],
@@ -163,7 +174,7 @@ class Annotator(multiprocessing.Process):
                     w2 = cluster_centers[k]
 
                     # CALC APPROX POSITIONS OF REMAINING WHEELS ON BOTH SIDES
-                    n = [(w1[1] - w2[1]) / d, (w2[0] - w1[0]) / d]  # n=(-u2, u1)/norm <=> normalized normal vector
+                    n = [(w1[1] - w2[1]) / d, (w2[0] - w1[0]) / d]  # n=(-u2, u1)/norm - normalized normal vector
                     w3_1 = [w1[0] + LENGTH * n[0], w1[1] + LENGTH * n[1]]
                     w4_1 = [w2[0] + LENGTH * n[0], w2[1] + LENGTH * n[1]]
                     w3_2 = [w1[0] - LENGTH * n[0], w1[1] - LENGTH * n[1]]
@@ -175,7 +186,7 @@ class Annotator(multiprocessing.Process):
                     w_ids = [-1] * 4  # w3_1, w3_2, w4_1, w4_2
                     w_ids = np.array(w_ids)
 
-                    for l in range(len(cluster_centers)):
+                    for l in xrange(len(cluster_centers)):
                         if l == j or l == k: continue
                         dw3_1 = euclidean_distance(cluster_centers[l][0], w3_1[0], cluster_centers[l][1], w3_1[1])
                         dw4_1 = euclidean_distance(cluster_centers[l][0], w4_1[0], cluster_centers[l][1], w4_1[1])
@@ -202,18 +213,19 @@ class Annotator(multiprocessing.Process):
                     numw = np.array([tmp[0] + tmp[2] + 2, tmp[1] + tmp[3] + 2])
                     idx = -1
 
-                    if not (numw[0] > 3 or numw[1] > 3):  # found less than four wheels check for middle scan points
+                    if not (numw[0] > 3 or numw[1] > 3):  # found less than four wheels
                         if numw[0] < min_wheels and numw[1] < min_wheels:
                             continue
                         if use_bumper:
                             for l in range(len(cluster_centers_middle)):
                                 d1 = euclidean_distance(cluster_centers[j][0], cluster_centers_middle[l][0],
-                                                    cluster_centers[j][1], cluster_centers_middle[l][1])
+                                                        cluster_centers[j][1], cluster_centers_middle[l][1])
                                 d2 = euclidean_distance(cluster_centers[k][0], cluster_centers_middle[l][0],
-                                                    cluster_centers[k][1], cluster_centers_middle[l][1])
+                                                        cluster_centers[k][1], cluster_centers_middle[l][1])
                                 if 0.35 < d1 < 1.2 and 0.35 < d2 < 1.2:
                                     if numw[0] == numw[1]:
-                                        idx = np.argmin(np.array([d_values[0] + d_values[2], d_values[1] + d_values[3]]))
+                                        idx = np.argmin(
+                                            np.array([d_values[0] + d_values[2], d_values[1] + d_values[3]]))
                                     else:
                                         idx = np.argmax(np.array(numw))
                                     break
@@ -237,9 +249,8 @@ class Annotator(multiprocessing.Process):
                         act_d = d_values[idx] + d_values[idx + 2] + abs(d - WIDTH)
                         ids = np.unique(fragment_ids[act_ids])
                         ids = ids[ids != -1]
-
                         # check if the clusters aren't part of other car
-                        for l in range(len(ids)):
+                        for l in xrange(len(ids)):
                             if numw[idx] < fragments[ids[l]][0]:
                                 the_best = False
                                 break
@@ -251,12 +262,11 @@ class Annotator(multiprocessing.Process):
                                     break
                         if not the_best:
                             continue
-
                         # check if clusters from the same parent cluster aren't part of other car
                         related_parents = np.unique(parent_clusters[act_ids])
                         parents_ids = np.unique(fragment_ids[np.nonzero(np.in1d(parent_clusters, related_parents))])
                         parents_ids = parents_ids[parents_ids != -1]
-                        for l in range(len(parents_ids)):
+                        for l in xrange(len(parents_ids)):
                             if numw[idx] < fragments[parents_ids[l]][0]:
                                 the_best = False
                                 break
@@ -266,133 +276,45 @@ class Annotator(multiprocessing.Process):
                                 else:
                                     the_best = False
                                     break
-
                         # if all check went gut, discard eventually other cars and add this
                         if the_best:
                             indices = np.nonzero(np.in1d(fragment_ids, ids))
                             fragment_ids[indices] = -1
                             indices = np.nonzero(np.in1d(fragment_ids, parents_ids))
                             fragment_ids[indices] = -1
-
                             # store car fragment: num of wheels, ideal dist deviation, position of a car
                             if idx == 0:
-                                n = np.array(n) * (-2 * idx + 1)
-                                loc = [(w1[0] + w2[0] + w3_1[0] + w4_1[0]) / 4, (w1[1] + w2[1] + w3_1[1] + w4_1[1]) / 4, np.arctan2(n[1], n[0])]
-                                # loc = [w1, w2, w3_1, w4_1]
+                                loc = [(w1[0] + w2[0] + w3_1[0] + w4_1[0]) / 4,
+                                       (w1[1] + w2[1] + w3_1[1] + w4_1[1]) / 4, np.array(n) * (-2 * idx + 1)]
                             else:
-                                loc = [(w1[0] + w2[0] + w3_2[0] + w4_2[0]) / 4, (w1[1] + w2[1] + w3_2[1] + w4_2[1]) / 4, np.arctan2(n[1], n[0])]
-                                # loc = [w1, w2, w3_2, w4_2]
+                                loc = [(w1[0] + w2[0] + w3_2[0] + w4_2[0]) / 4,
+                                       (w1[1] + w2[1] + w3_2[1] + w4_2[1]) / 4, np.array(n) * (-2 * idx + 1)]
                             fragments.append([numw[idx], act_d, act_ids, loc])
                             fragment_ids[act_ids] = len(fragments) - 1
 
+        plt.figure()
+        plt.scatter(self.data[:, 0], self.data[:, 1], color='black')
+        plt.scatter(points[:, 0], points[:, 1], color='red')
+
         car_idx = np.unique(fragment_ids)
         car_idx = car_idx[car_idx != -1]
-        cars = []
-        for i in range(len(car_idx)):
-            #prevent misdetections from the robot itself
-            x = fragments[car_idx[i]][3][0]
-            y = fragments[car_idx[i]][3][1]
-            z = fragments[car_idx[i]][3][2]
-            if abs(x - -2.8) < 0.4 and abs(y - 0) < 0.4 and abs(z - -3.1) < 0.4:
-                continue
-            cars.append([fragments[car_idx[i]][3][0], fragments[car_idx[i]][3][1], fragments[car_idx[i]][3][2]])
+        for j in range(len(car_idx)):
+            self.cars_out.append([fragments[car_idx[j]][3][0], fragments[car_idx[j]][3][1], fragments[car_idx[j]][3][2]])
+            plt.scatter(fragments[car_idx[j]][3][0], fragments[car_idx[j]][3][1])
+        plt.gca().set_aspect('equal', adjustable='box')
+        plt.show()
+        input()
 
-        # cars are in format: center_x, center_y, angle [radians]
-
-        wheels = [] #cluster_centers[:, :2]
-        cols = cols
-
-        for i in cars:
-            wheels.append([i[0], i[1]])
-            cols.append([255, 0, 0])
-
-
-        if len(wheels) > 0:
-            self.pointsToImgsDrawWheels(np.concatenate([points, middle_points]), "clusters-j-c", np.concatenate([cluster_centers[:, :2], wheels]), cols)
-        return cars
-
-    def pointsToImgsDrawWheels(self, points, location, wheels, colours):
-
-        res = 1024
-        scale = 25
-        accum = np.zeros((res, res, 3))
-        accum.fill(255)
-
-        for point in points:
-            x, y = point[:2]
-            x *= scale
-            y *= scale
-            x = int(x)
-            y = int(y)
-            try:
-                accum[x+int(res/2), y+int(res/2)] = [0, 0, 0]
-            except:
-                pass
-
-        for wheel in range(len(wheels)):
-            x, y = wheels[wheel][:2]
-            x *= scale
-            y *= scale
-            x = int(x)
-            y = int(y)
-
-            try:
-                accum[x+int(res/2), y+int(res/2)] = colours[wheel]
-            except:
-                pass
-
-            try:
-                accum[x+int(res/2)+1, y+int(res/2)+1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)+1, y+int(res/2)-1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)-1, y+int(res/2)+1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)-1, y+int(res/2)-1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)-1, y+int(res/2)] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2), y+int(res/2)-1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2), y+int(res/2)+1] = colours[wheel]
-            except:
-                pass
-            try:
-                accum[x+int(res/2)+1, y+int(res/2)] = colours[wheel]
-            except:
-                pass
-        fn = os.path.join(visualisationPath, location)
-        os.makedirs(fn, exist_ok=True)
-        fn = os.path.join(fn, self.filename + "-" + str(self.fileCounter) + ".png")
-        cv2.imwrite(fn, accum)
 
 if __name__ == "__main__":
+    model_path = "weight_norm/epoch21.pth"
+    data_path = "../gps-square.bag.pickle"
 
-    jobs = []
-    for files in os.walk(datasetPath):
-        for filename in files[2]:
-            jobs.append(Annotator(files[0], filename))
-    print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 6
-    limit = maxCores
-    batch = maxCores
-    for i in range(len(jobs)):
-        if i < limit:
-            jobs[i].start()
-        else:
-            for j in range(limit):
-                jobs[j].join()
-            limit += batch
-            jobs[i].start()
+    with open(data_path, "rb") as f:
+        data = pickle.load(f)
+
+    evaluator = EvaluatorPointNet(model_path)
+    data = data["scans"]
+    for i in range(len(data)):
+        print("Processing {}".format(i))
+        evaluator.evaluate(data[i])
