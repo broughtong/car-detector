@@ -17,9 +17,9 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/results/simple-s"
+datasetPath = "../data/results/detector-s"
 outputPath = "../data/results/temporal-prc-"
-visualisationPath = "../visualisation/temporal-s"
+visualisationPath = "../visualisation/temporal-prc-"
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -50,11 +50,11 @@ class Interpolator(multiprocessing.Process):
         self.data["trans"] = []
         self.data["ts"] = []
         self.data["annotations"] = []
-        self.data["annotations_rel"] = []
         
-        os.makedirs(outputPath, exist_ok=True)
-        fn = self.filename + "%s-%s-%s.pickle" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
-        with open(os.path.join(outputPath, fn), "wb") as f:
+        folder = outputPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        os.makedirs(folder, exist_ok=True)
+        fn = self.filename
+        with open(os.path.join(folder, fn), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
     def interpolate(self):
@@ -268,7 +268,8 @@ class Interpolator(multiprocessing.Process):
 
 
         self.fileCounter = 0
-        os.makedirs(visualisationPath, exist_ok=True)
+        folder = visualisationPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        os.makedirs(folder, exist_ok=True)
         for i in range(len(scans)):
 
             points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"]])
@@ -287,7 +288,7 @@ class Interpolator(multiprocessing.Process):
             annotations = self.data["extrapolated"][i]
 
             #self.pointsToImgsDrawWheels(points, "interpolated", dets, colours)
-            fn = os.path.join(visualisationPath, "%s-%s-%s.png" % ("interpolated", self.filename, self.fileCounter))
+            fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
             utils.drawImgFromPoints(fn, points, dets, colours, annotations)
             self.fileCounter += 1
 
@@ -311,11 +312,11 @@ if __name__ == "__main__":
     #            jobs.append(Interpolator(files[0], filename, 200, 0.4, 200))
 
     jobs = []
-    for i in range(0, 600):
-        jobs.append(Interpolator("../data/results/simple-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
+    for i in range(0, 1000, 50):
+        jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 2
+    cpuCores = 1
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

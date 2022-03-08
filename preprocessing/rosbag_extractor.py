@@ -201,13 +201,22 @@ class Extractor(multiprocessing.Process):
         self.fileCounter += 1
 
 if __name__ == "__main__":
-    
+
+    rosbagList = []
+    with open("./rosbagList") as f:
+        rosbagList = f.read()
+    rosbagList = rosbagList.split("\n")
+    rosbagList = list(filter(None, rosbagList))
+    rosbagList = [x.split(" ")[0] + ".bag" for x in rosbagList]
+    print(rosbagList)
+
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-4:] == ".bag":
-                jobs.append(Extractor(files[0], filename))
-    maxCores = 7
+                if filename in rosbagList:
+                    jobs.append(Extractor(files[0], filename))
+    maxCores = 2
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)
@@ -219,6 +228,4 @@ if __name__ == "__main__":
                 jobs[j].join()
             limit += batch
             jobs[i].start()
-
-
 

@@ -10,8 +10,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 datasetPath = "../data/extracted/"
-outputPath = "../data/results/simple-s/"
-visualisationPath = "../visualisation/simple-s/"
+outputPath = "../data/results/detector-s/"
+visualisationPath = "../visualisation/detector-s/"
 WIDTH = 1.5
 LENGTH = 2.5
 DIAGONAL = 3.1
@@ -385,7 +385,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Annotator(files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 6
+    maxCores = 4
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):
