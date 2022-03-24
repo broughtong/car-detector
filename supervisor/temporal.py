@@ -40,21 +40,24 @@ class Interpolator(multiprocessing.Process):
     def run(self):
 
         print("Process spawned for file %s" % (self.filename), flush = True)
+        folder = outputPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        if os.path.isfile(os.path.join(folder, self.filename)):
+            if os.path.getsize(os.path.join(folder, self.filename)) > 0:
+                return
 
         with open(os.path.join(self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
 
         self.interpolate()
         
-        self.data["scans"] = []
-        self.data["trans"] = []
-        self.data["ts"] = []
-        self.data["annotations"] = []
+        #self.data["scans"] = []
+        #self.data["trans"] = []
+        #self.data["ts"] = []
+        #self.data["annotations"] = []
         
         folder = outputPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
         os.makedirs(folder, exist_ok=True)
-        fn = self.filename
-        with open(os.path.join(folder, fn), "wb") as f:
+        with open(os.path.join(folder, self.filename), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
     def interpolate(self):
@@ -305,15 +308,17 @@ class Interpolator(multiprocessing.Process):
 
 if __name__ == "__main__":
     
-    #jobs = []
-    #for files in os.walk(datasetPath):
-    #    for filename in files[2]:
-    #        if filename[-7:] == ".pickle":
-    #            jobs.append(Interpolator(files[0], filename, 200, 0.4, 200))
-
     jobs = []
-    for i in range(0, 1000, 50):
-        jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
+    for files in os.walk(datasetPath):
+        for filename in files[2]:
+            if filename[-7:] == ".pickle":
+                for i in range(0, 2000, 100):
+                    jobs.append(Interpolator(files[0], filename, 1400, 0.4, 0))
+                    break
+
+    #jobs = []
+    #for i in range(0, 1000, 50):
+    #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 1

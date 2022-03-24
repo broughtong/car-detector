@@ -14,10 +14,10 @@ confusionGraphLimit = 20.0
 graph_resolution = 250
 detectionThreshold = 0.5
 
-evalName = "test"
-#datasetPaths = {"../data/results/maskrcnn/19-02-22-03_03.pth": "maskrcnn", 
-datasetPaths = {"../data/results/temporal-s": "extrapolated", 
-        "../data/results/simple-s": "annotations"}
+evalName = "test-temporal-tunen2"
+datasetPaths = {"../data/results/detector-s": "annotations"}
+for i in range(1200, 2000, 100):
+    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
 visualisationPath = "../visualisation/eval-" + evalName
 tfPath = "../data/static_tfs"
 gtPath = "../data/gt"
@@ -62,6 +62,13 @@ def combineScans(scans):
 
 def evaluateFile(filename, method, filePart):
     global lastVal
+    
+    gtfn = os.path.join(gtPath, filename)
+    gtfn = gtfn[:-11] + "-lidar.pkl"
+    if not os.path.isfile(gtfn):
+        return
+
+    print("Evaluating %s from %s (%s)" % (filename, method, filePart))
 
     fn = os.path.join(method, filename)
     if not os.path.isfile(fn):
@@ -73,12 +80,6 @@ def evaluateFile(filename, method, filePart):
         print("Unable to open file: %s" % (tffn))
         return
 
-    gtfn = os.path.join(gtPath, filename)
-    gtfn = gtfn[:-11] + "-lidar.pkl"
-    if not os.path.isfile(gtfn):
-        print("Unable to open GT file: %s" % (gtfn))
-        return
-
     data = []
     gtdata = []
     tfdata = []
@@ -88,7 +89,7 @@ def evaluateFile(filename, method, filePart):
     with open(tffn, "rb") as f:
         tfdata = pickle.load(f)
     with open(gtfn, "rb") as f:
-        gtdata = pickle.load(f)
+        gtdata = pickle.load(f, encoding='latin1')
 
     for val in np.linspace(0.0, detectionGraphLimit, num=graph_resolution):
         gt_det_hit[method][val] = 0
@@ -106,6 +107,9 @@ def evaluateFile(filename, method, filePart):
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
         if gttime not in data["ts"]:
             print("Warning, no data for gt!")
+            print(fn, gtfn, frame, frameCounter)
+            print(frame[0].secs, frame[0].nsecs)
+            print(gttime)
 
         dataFrameIdx = data["ts"].index(gttime)
         dataFrame = data["scans"][dataFrameIdx]
@@ -251,38 +255,57 @@ def drawGraphs():
         tp = tp_range[method][lastVal]
         fn = fn_range[method][lastVal]
         fp = fp_range[method][lastVal]
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
+        try:
+            precision = tp / (tp + fp)
+            recall = tp / (tp + fn)
+        except:
+            print("Cannot generate pr/re %s %i %i %i" % (method, tp, fn, fp))
 
-        blanksRecall = [x for x in recall_range[method].keys() if recall_range[method][x] == None]
-        blanksPrecision = [x for x in precision_range[method].keys() if precision_range[method][x] == None]
-        recallIDs = [x for x in recall_range[method].keys() if x not in blanksRecall]
-        precisionIDs = [x for x in precision_range[method].keys() if x not in blanksPrecision]
-        filteredRecall[method] = {}
-        filteredPrecision[method] = {}
-        for key in recallIDs:
-            #print(recall_range.keys(), flush=True)
-            #print(filteredRecall.keys(), flush=True)
-            #print(key, flush=True)
-            #print(recall_range[key].keys(), flush=True)
-            #print(filteredRecall[key].keys(), flush=True)
+        try:
+            blanksRecall = [x for x in recall_range[method].keys() if recall_range[method][x] == None]
+            blanksPrecision = [x for x in precision_range[method].keys() if precision_range[method][x] == None]
+            recallIDs = [x for x in recall_range[method].keys() if x not in blanksRecall]
+            precisionIDs = [x for x in precision_range[method].keys() if x not in blanksPrecision]
+            filteredRecall[method] = {}
+            filteredPrecision[method] = {}
+            for key in recallIDs:
+                #print(recall_range.keys(), flush=True)
+                #print(filteredRecall.keys(), flush=True)
+                #print(key, flush=True)
+                #print(recall_range[key].keys(), flush=True)
+                #print(filteredRecall[key].keys(), flush=True)
 
-            filteredRecall[method][key] = recall_range[method][key]
-        for key in precisionIDs:
-            filteredPrecision[method][key] = precision_range[method][key]        
+                filteredRecall[method][key] = recall_range[method][key]
+            for key in precisionIDs:
+                filteredPrecision[method][key] = precision_range[method][key]        
+        except:
+            pass
 
+        precision = "N/A"
+        recall = "N/A"
         confusionPickle[method] = {"tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall}
-        confusionText += "tp %i fp %i fn %i precision %f recall %f method %s\n" % (tp, fp, fn, precision, recall, method)
+        try:
+            confusionText += "tp %i fp %i fn %i precision %f recall %f method %s\n" % (tp, fp, fn, precision, recall, method)
+        except:
+            confusionText += "tp %i fp %i fn %i precision %s recall %s method %s\n" % (tp, fp, fn, precision, recall, method)
+
 
         print("===%s===" % (method))
         print("Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
-        print("Precision/Recall = %f %f" % (precision, recall))
+        try:
+            print("Precision/Recall = %f %f" % (precision, recall))
+        except:
+            print("Precision/Recall = %s %s" % (precision, recall))
+            
 
     makeGraph(gt_det_hit, gt_det_total, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "gtdet-" + filename + ".png"))
     makeGraph(det_gt_hit, det_gt_total, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "detgt-" + filename + ".png"))
     makeGraph(rot_error, rot_total, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "rot-" + filename + ".png"))
-    makeGraph(filteredRecall, 1.0, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "recall-" + filename + ".png"))
-    makeGraph(filteredPrecision, 1.0, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "precision-" + filename + ".png"))
+    try:
+        makeGraph(filteredRecall, 1.0, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "recall-" + filename + ".png"))
+        makeGraph(filteredPrecision, 1.0, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "precision-" + filename + ".png"))
+    except:
+        pass
 
     with open(os.path.join(resultsPath, "conf.pickle"), "wb") as f:
         pickle.dump(confusionPickle, f, protocol=2)
@@ -386,11 +409,11 @@ def pointsToImgsDraw(filename, frameCounter, points, wheels, colours):
 if __name__ == "__main__":
 
     for method in datasetPaths:
+        print("Evaluation method %s" % (method))
         for files in os.walk(method):
             for filename in files[2]:
                 if filename[-7:] == ".pickle":
                     filePart = datasetPaths[method]
-                    print("Evaluating %s from %s (%s)" % (filename, method, filePart))
                     evaluateFile(filename, method, filePart)
     print("Generating Graphs")
     drawGraphs()
