@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 datasetPath = "../data/results/detector-s"
-outputPath = "../data/results/temporal-prc-"
+outputPath = "../data/results/temporal-new-"
 visualisationPath = "../visualisation/temporal-prc-"
 
 @contextmanager
@@ -27,40 +27,45 @@ def suppress_stdout_stderr():
         with redirect_stderr(fnull) as err, redirect_stdout(fnull) as out:
             yield (err, out)
 
-class Interpolator(multiprocessing.Process):
-    def __init__(self, path, filename, interpolateFrames, detectionDistance, extrapolateFrames):
+class Temporal(multiprocessing.Process):
+    def __init__(self, path, filename, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired):
         multiprocessing.Process.__init__(self)
 
         self.filename = filename
         self.path = path
-        self.interpolateFrames = interpolateFrames
         self.detectionDistance = detectionDistance
+        self.interpolateFrames = interpolateFrames
+        self.interpolateRequired = interpolateRequired
         self.extrapolateFrames = extrapolateFrames
+        self.extrapolateRequired = extrapolateRequired
+        self.underRobotDistance = 1.8
 
     def run(self):
 
         print("Process spawned for file %s" % (self.filename), flush = True)
-        folder = outputPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
         if os.path.isfile(os.path.join(folder, self.filename)):
             if os.path.getsize(os.path.join(folder, self.filename)) > 0:
-                return
+                #print("Skipping, exists...")
+                #return
+                pass
 
         with open(os.path.join(self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
 
-        self.interpolate()
+        self.temporal()
         
         #self.data["scans"] = []
         #self.data["trans"] = []
         #self.data["ts"] = []
         #self.data["annotations"] = []
         
-        folder = outputPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
         os.makedirs(folder, exist_ok=True)
         with open(os.path.join(folder, self.filename), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
-    def interpolate(self):
+    def temporal(self):
 
         scans = self.data["scans"]
         trans = self.data["trans"]
@@ -100,59 +105,92 @@ class Interpolator(multiprocessing.Process):
         for i in range(len(scans)):
             lerped.append([])
             lerpedOnly.append([])
-        for mainIdx in range(len(scans)):
+
+        for mainIdx in range(len(scans) - self.interpolateFrames):
             for car in annotationsOdom[mainIdx]: #for each car in the current scan:
 
-                isConsistent = False
-                futurePosition = None
-                nFrames = None
-                toGo = min(mainIdx + self.interpolateFrames, len(scans))
+                cars = [car]
+                carFrames = [mainIdx]
 
-                #we have some car, look for any future detections
-                for smallWindowIdx in range(mainIdx+1, toGo): 
-                    for possibleMatchIdx in range(len(annotationsOdom[smallWindowIdx])): #for each car in each other frame in small window
+                for smallWindowIdx in range(mainIdx+1, mainIdx+self.interpolateFrames+1):
+                    for possibleMatchIdx in range(len(annotationsOdom[smallWindowIdx])):
                         otherCar = annotationsOdom[smallWindowIdx][possibleMatchIdx]
-
-                        dx = car[0] - otherCar[0]
-                        dy = car[1] - otherCar[1]
+                        
+                        dx = cars[-1][0] - otherCar[0]
+                        dy = cars[-1][1] - otherCar[1]
                         dist = ((dx**2) + (dy**2))**0.5
 
                         if dist < self.detectionDistance:
-                            isConsistent = True
-                            futurePosition = otherCar
-                            nFrames = smallWindowIdx - mainIdx
-                            break
-                    if isConsistent:
-                        break
+                            cars.append(otherCar)
+                            carFrames.append(smallWindowIdx)
 
-                if isConsistent == False:
+                if len(cars) < self.interpolateRequired:
                     continue
-                if nFrames == 1:
+                if carFrames[-1] - carFrames[0] < self.interpolateRequired: #all consecutive
                     continue
 
-                startX, endX = car[0], futurePosition[0]
-                startY, endY = car[1], futurePosition[1]
-                startR, endR = car[2], futurePosition[2]
+                for frameIdx in range(len(carFrames[:-1])):
+                    if carFrames[frameIdx+1] - carFrames[frameIdx] == 1: #consecutive frame
+                        continue
 
-                for i in range(1, nFrames):
-                    interval = i / nFrames
-                    x = self.lerp(startX, endX, interval)
-                    y = self.lerp(startY, endY, interval)
-                    r = self.lerp(startR, endR, interval, rot=True)
+                    startX, endX = cars[frameIdx][0], cars[frameIdx+1][0]
+                    startY, endY = cars[frameIdx][1], cars[frameIdx+1][1]
+                    startR, endR = cars[frameIdx][2], cars[frameIdx+1][2]
 
-                    robopose = robotPoses[mainIdx+i]
-                    dx = x - robopose[0] 
-                    dy = y - robopose[1]
-                    dist = ((dx**2) + (dy**2))**0.5
-    
-                    if dist > 1.8: #stop detections from under the robot
-                        lerped[mainIdx+i].append([x, y, r])
-                        lerpedOnly[mainIdx+i].append([x, y, r])
+                    nFramesBetween = carFrames[frameIdx+1] - carFrames[frameIdx]
+
+                    for i in range(1, nFramesBetween):  #carFrames[frameIdx]+1, carFrames[frameIdx+1]):
+
+                        interval = i / nFramesBetween
+                        x = self.lerp(startX, endX, interval)
+                        y = self.lerp(startY, endY, interval)
+                        r = self.lerp(startR, endR, interval, rot=True)
+
+                        robopose = robotPoses[carFrames[frameIdx]+i]
+                        dx = x - robopose[0] 
+                        dy = y - robopose[1]
+                        dist = ((dx**2) + (dy**2))**0.5
+
+                        if dist > self.underRobotDistance: #stop detections from under the robot
+                            lerped[carFrames[frameIdx]+i].append([x, y, r])
+                            lerpedOnly[carFrames[frameIdx]+i].append([x, y, r])
 
         #add real detections to lerped dataset
         for frameIdx in range(len(annotationsOdom)):
             for detectionIdx in range(len(annotationsOdom[frameIdx])):
                 lerped[frameIdx].append(annotationsOdom[frameIdx][detectionIdx])
+
+        #erode - remove single dets with no surrounding
+        eroded = []
+        for i in range(len(scans)):
+            eroded.append([])
+        for mainIdx in range(len(scans)):
+            for car in lerped[mainIdx]: #for each car in the current scan:
+
+                foundCar = False
+
+                if mainIdx > 0:
+                    for otherCar in lerped[mainIdx-1]:
+                        dx = car[0] - otherCar[0]
+                        dy = car[1] - otherCar[1]
+                        dist = ((dx**2) + (dy**2))**0.5
+
+                        if dist < self.detectionDistance:
+                            foundCar = True
+                            break
+
+                if mainIdx < len(scans)-1:
+                    for otherCar in lerped[mainIdx+1]:
+                        dx = car[0] - otherCar[0]
+                        dy = car[1] - otherCar[1]
+                        dist = ((dx**2) + (dy**2))**0.5
+
+                        if dist < self.detectionDistance:
+                            foundCar = True
+                            break
+
+                if foundCar == True:
+                    eroded[mainIdx].append(car)
 
         #extrapolate
         extrapolated = []
@@ -160,18 +198,18 @@ class Interpolator(multiprocessing.Process):
         for i in range(len(scans)):
             extrapolated.append([])
             extrapolatedOnly.append([])
-        for frameIdx in range(len(lerped)):
-            for detectionIdx in range(len(lerped[frameIdx])):
+        for frameIdx in range(len(scans)):
+            for detectionIdx in range(len(eroded[frameIdx])):
 
                 #for each detection, we will check forward and back 1 frame
 
                 #forward
-                if frameIdx < len(lerped)-1:
-                    nextFrame = lerped[frameIdx+1]
+                if frameIdx < len(eroded)-1:
+                    nextFrame = eroded[frameIdx+1]
                     foundCar = False
                     for otherDetectionIdx in range(len(nextFrame)):
-                        car = lerped[frameIdx][detectionIdx]
-                        otherCar = lerped[frameIdx+1][otherDetectionIdx]
+                        car = eroded[frameIdx][detectionIdx]
+                        otherCar = eroded[frameIdx+1][otherDetectionIdx]
                         dx = car[0] - otherCar[0]
                         dy = car[1] - otherCar[1]
                         dist = ((dx**2) + (dy**2))**0.5
@@ -179,23 +217,48 @@ class Interpolator(multiprocessing.Process):
                         if dist < self.detectionDistance:
                             foundCar = True
                     if foundCar == False:
-                        for i in range(frameIdx+1, frameIdx + self.extrapolateFrames):
-                            if i <= len(lerped)-1: 
-                                robopose = robotPoses[i]
-                                dx = car[0] - robopose[0] 
-                                dy = car[1] - robopose[1]
+                        #no car on next frame, lets check back that there has been a few dets, then extrap
+                        #it will have been interped, so we can just check self.extrapolateRequired
+                        allRequired = True
+                        for i in range(1, self.extrapolateRequired+1):
+                            checkFrame = frameIdx - i
+                            if checkFrame < 0:
+                                allRequired = False
+                                break
+                            
+                            foundMatchInFrame = False
+                            for checkCar in eroded[checkFrame]:
+                                car = eroded[frameIdx][detectionIdx]
+                                dx = car[0] - checkCar[0]
+                                dy = car[1] - checkCar[1]
                                 dist = ((dx**2) + (dy**2))**0.5
-                
-                                if dist > 1.8: #stop detections from under the robot
-                                    extrapolated[i].append(car)
-                                    extrapolatedOnly[i].append(car)
+
+                                if dist < self.detectionDistance:
+                                    foundMatchInFrame = True
+                                    break
+                            
+                            if foundMatchInFrame == False:
+                                allRequired = False
+                                break
+
+                        if allRequired:
+                            for i in range(frameIdx+1, frameIdx + self.extrapolateFrames):
+                                if i <= len(eroded)-1: 
+                                    robopose = robotPoses[i]
+                                    dx = car[0] - robopose[0] 
+                                    dy = car[1] - robopose[1]
+                                    dist = ((dx**2) + (dy**2))**0.5
+                    
+                                    if dist > self.underRobotDistance: #stop detections from under the robot
+                                        extrapolated[i].append(car)
+                                        extrapolatedOnly[i].append(car)
                 #backward
                 if frameIdx > 0:
-                    prevFrame = lerped[frameIdx-1]
+                    prevFrame = eroded[frameIdx-1]
                     foundCar = False
                     for otherDetectionIdx in range(len(prevFrame)):
-                        car = lerped[frameIdx][detectionIdx]
-                        otherCar = lerped[frameIdx-1][otherDetectionIdx]
+                        car = eroded[frameIdx][detectionIdx]
+                        otherCar = eroded[frameIdx-1][otherDetectionIdx]
                         dx = car[0] - otherCar[0]
                         dy = car[1] - otherCar[1]
                         dist = ((dx**2) + (dy**2))**0.5
@@ -203,27 +266,56 @@ class Interpolator(multiprocessing.Process):
                         if dist < self.detectionDistance:
                             foundCar = True
                     if foundCar == False:
-                        for i in range(frameIdx - self.extrapolateFrames, frameIdx):
-                            if i >= 0:
-                                robopose = robotPoses[i]
-                                dx = car[0] - robopose[0] 
-                                dy = car[1] - robopose[1]
+                        #no car on prev frame, lets check forward that there has been a few dets, then extrap
+                        #it will have been interped, so we can just check self.extrapolateRequired
+                        allRequired = True
+
+                        for i in range(1, self.extrapolateRequired+1):
+                            checkFrame = frameIdx + i
+                            if checkFrame >= len(eroded):
+                                allRequired = False
+                                break
+                            
+                            foundMatchInFrame = False
+                            for checkCar in eroded[checkFrame]:
+                                car = eroded[frameIdx][detectionIdx]
+                                dx = car[0] - checkCar[0]
+                                dy = car[1] - checkCar[1]
                                 dist = ((dx**2) + (dy**2))**0.5
-                
-                                if dist > 1.8: #stop detections from under the robot
-                                    extrapolated[i].append(car)
-                                    extrapolatedOnly[i].append(car)
+
+                                if dist < self.detectionDistance:
+                                    foundMatchInFrame = True
+                                    break
+                            
+                            if foundMatchInFrame == False:
+                                allRequired = False
+                                break
+
+                        if allRequired:
+                            for i in range(frameIdx - self.extrapolateFrames, frameIdx):
+                                if i >= 0:
+                                    robopose = robotPoses[i]
+                                    dx = car[0] - robopose[0] 
+                                    dy = car[1] - robopose[1]
+                                    dist = ((dx**2) + (dy**2))**0.5
+                    
+                                    if dist > self.underRobotDistance: #stop detections from under the robot
+                                        extrapolated[i].append(car)
+                                        extrapolatedOnly[i].append(car)
 
         #add real detections to extrapolated
         for frameIdx in range(len(annotationsOdom)):
-            for detectionIdx in range(len(lerped[frameIdx])):
-                extrapolated[frameIdx].append(lerped[frameIdx][detectionIdx])
+            for detectionIdx in range(len(eroded[frameIdx])):
+                extrapolated[frameIdx].append(eroded[frameIdx][detectionIdx])
 
         #self.data["annotationsOdom"]  = annotationsOdom
         #self.data["lerpedOdom"] = lerped
-        #self.data["lerped"] = []
         #self.data["extrapOdom"] = extrapolated
+        self.data["lerped"] = []
+        self.data["lerpedOnly"] = []
+        self.data["eroded"] = []
         self.data["extrapolated"] = []
+        self.data["extrapolatedOnly"] = []
 
         #move back to robot frame
         for idx in range(len(scans)):
@@ -234,6 +326,9 @@ class Interpolator(multiprocessing.Process):
             yaw = yaw[0]
             detections = []
             detectionsExtrap = []
+            detectionsOnly = []
+            detectionsExtrapOnly = []
+            erodedRob = []
 
             for det in range(len(lerped[idx])):
                 point = np.array([*lerped[idx][det][:2], 0, 1])
@@ -243,12 +338,6 @@ class Interpolator(multiprocessing.Process):
                 orientation = lerped[idx][det][2] + yaw
                 detections.append([*point, orientation])
                 
-            for det in range(len(lerpedOnly[idx])):
-                point = np.array([*lerpedOnly[idx][det][:2], 0, 1])
-                point = np.matmul(mat, point)
-                point = list(point[:2])
-                lerpedOnly[idx][det] = point
-            
             for det in range(len(extrapolated[idx])):
                 point = np.array([*extrapolated[idx][det][:2], 0, 1])
                 point = np.matmul(mat, point)
@@ -257,42 +346,51 @@ class Interpolator(multiprocessing.Process):
                 orientation = extrapolated[idx][det][2] + yaw
                 detectionsExtrap.append([*point, orientation])
                 
+            for det in range(len(lerpedOnly[idx])):
+                point = np.array([*lerpedOnly[idx][det][:2], 0, 1])
+                point = np.matmul(mat, point)
+                point = list(point[:2])
+                
+                orientation = lerpedOnly[idx][det][2] + yaw
+                detectionsOnly.append([*point, orientation])
+                
             for det in range(len(extrapolatedOnly[idx])):
                 point = np.array([*extrapolatedOnly[idx][det][:2], 0, 1])
                 point = np.matmul(mat, point)
                 point = list(point[:2])
-                extrapolatedOnly[idx][det] = point
+                
+                orientation = extrapolatedOnly[idx][det][2] + yaw
+                detectionsExtrapOnly.append([*point, orientation])
 
-            #self.data["lerped"].append(detections)
+            for det in range(len(eroded[idx])):
+                point = np.array([*eroded[idx][det][:2], 0, 1])
+                point = np.matmul(mat, point)
+                point = list(point[:2])
+                
+                orientation = eroded[idx][det][2] + yaw
+                erodedRob.append([*point, orientation])
+
+            self.data["lerped"].append(detections)
             self.data["extrapolated"].append(detectionsExtrap)
+            self.data["lerpedOnly"].append(detectionsOnly)
+            self.data["extrapolatedOnly"].append(detectionsExtrapOnly)
+            self.data["eroded"].append(erodedRob)
         with suppress_stdout_stderr():
-            #self.data["lerped"] = np.array(self.data["lerped"])
+            self.data["lerped"] = np.array(self.data["lerped"])
             self.data["extrapolated"] = np.array(self.data["extrapolated"])
-
+            self.data["lerpedOnly"] = np.array(self.data["lerpedOnly"])
+            self.data["extrapolatedOnly"] = np.array(self.data["extrapolatedOnly"])
+            self.data["eroded"] = np.array(self.data["eroded"])
 
         self.fileCounter = 0
-        folder = visualisationPath + "%s-%s-%s" % (str(self.interpolateFrames), str(self.detectionDistance), str(self.extrapolateFrames))
+        folder = visualisationPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
         os.makedirs(folder, exist_ok=True)
         for i in range(len(scans)):
 
-            points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"]])
-            dets = []
-            colours = []
-            for j in range(len(self.data["lerped"][i])):
-                dets.append([self.data["lerped"][i][j][0], self.data["lerped"][i][j][1]])
-                colours.append([0, 255, 255])
-            for j in range(len(lerpedOnly[i])):
-                dets.append([lerpedOnly[i][j][0], lerpedOnly[i][j][1]])
-                colours.append([255, 0, 0])
-            for j in range(len(extrapolatedOnly[i])):
-                dets.append([extrapolatedOnly[i][j][0], extrapolatedOnly[i][j][1]])
-                colours.append([0, 255, 0])
-
-            annotations = self.data["extrapolated"][i]
-
-            #self.pointsToImgsDrawWheels(points, "interpolated", dets, colours)
+            points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"], scans[i]["sick_front"]])
+            
             fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
-            utils.drawImgFromPoints(fn, points, dets, colours, annotations)
+            utils.drawImgFromPoints(fn, points, [], [], self.data["extrapolatedOnly"][i], self.data["eroded"][i])
             self.fileCounter += 1
 
     def lerp(self, a, b, i, rot=False):
@@ -312,16 +410,16 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
-                for i in range(0, 2000, 100):
-                    jobs.append(Interpolator(files[0], filename, 1400, 0.4, 0))
-                    break
+                #for i in range(0, 1000, 100):
+                jobs.append(Temporal(files[0], filename, 0.5, 50, 6, 50, 6))
+                #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
     #jobs = []
     #for i in range(0, 1000, 50):
     #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 1
+    cpuCores = 12
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

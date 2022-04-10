@@ -9,6 +9,15 @@ import multiprocessing
 
 def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
 
+    #filename
+    #scan points
+    #highlighted points
+    #highlighted point colours
+    #car position
+    #second arr car position
+    #dilate?
+    #render annotations?
+
     cars = copy.deepcopy(cars)
     cars2 = copy.deepcopy(cars2)
 
@@ -25,7 +34,7 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         angle = car[2] % math.pi
         alpha = math.cos(angle) * 0.5
         beta = math.sin(angle) * 0.5
-        width, height = int(4.5*scale), int(2.3*scale)
+        width, height = int(4.85*scale), int(2.4*scale)
 
         a = [int(car[1] + alpha * height - beta * width), int(car[0] - beta * height - alpha * width)]
         b = [int(car[1] - alpha * height - beta * width), int(car[0] + beta * height - alpha * width)]
@@ -43,7 +52,7 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         angle = car[2] % (math.pi * 2)
         alpha = math.cos(angle) * 0.5
         beta = math.sin(angle) * 0.5
-        width, height = int(4.5*scale), int(2.3*scale)
+        width, height = int(4.85*scale), int(2.4*scale)
 
         a = [int(car[1] + alpha * height - beta * width), int(car[0] - beta * height - alpha * width)]
         b = [int(car[1] - alpha * height - beta * width), int(car[0] + beta * height - alpha * width)]

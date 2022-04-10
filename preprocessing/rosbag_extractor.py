@@ -36,7 +36,7 @@ class Extractor(multiprocessing.Process):
         self.path = path
         self.topicBuf = [None, None, None]
         self.lastX, self.lastY = None, None
-        self.distThresh = 0.5
+        self.distThresh = 0.1
         self.fileCounter = 0
         self.position = None
         self.scans = []
@@ -188,9 +188,9 @@ class Extractor(multiprocessing.Process):
         #self.topicBuf = [None, None, None]
         msgs.append(msg)
 
-        #if not self.odometryMoved():
-        #    return
-        #print("Robot moved!", flush = True)
+        if not self.odometryMoved():
+            return
+        print("Robot moved!", flush = True)
 
         combined, trans, ts = self.combineScans(msgs, t)
         if len(combined) == 0:
@@ -214,8 +214,8 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-4:] == ".bag":
-                if filename in rosbagList:
-                    jobs.append(Extractor(files[0], filename))
+                #if filename in rosbagList:
+                jobs.append(Extractor(files[0], filename))
     maxCores = 2
     limit = maxCores
     batch = maxCores 
