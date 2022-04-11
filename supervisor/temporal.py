@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import copy
 import utils
 import rospy
 import pickle
@@ -303,6 +304,34 @@ class Temporal(multiprocessing.Process):
                                         extrapolated[i].append(car)
                                         extrapolatedOnly[i].append(car)
 
+        #some shitty nms due to one extrapolater going forward possibly overlapping one going backwards
+        newExtrapolated = []
+        for mainIdx in range(len(scans)):
+            newFrame = []
+            for carIdx in range(len(extrapolatedOnly[mainIdx])): #for each car in the current scan:
+                
+                unique = True
+                car = extrapolatedOnly[mainIdx][carIdx]
+                for otherCarIdx in range(carIdx+1, len(extrapolatedOnly[mainIdx])):
+
+                    otherCar = extrapolatedOnly[mainIdx][otherCarIdx]
+
+                    dx = car[0] - otherCar[0]
+                    dy = car[1] - otherCar[1]
+                    dist = ((dx**2) + (dy**2))**0.5
+
+                    if dist < self.detectionDistance:
+                        unique = False
+
+                if unique == True:
+                        newFrame.append(car)
+             
+            newExtrapolated.append(newFrame)
+
+        extrapolated = newExtrapolated
+        extrapolatedOnly = copy.deepcopy(extrapolated)
+
+
         #add real detections to extrapolated
         for frameIdx in range(len(annotationsOdom)):
             for detectionIdx in range(len(eroded[frameIdx])):
@@ -411,7 +440,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 #for i in range(0, 1000, 100):
-                jobs.append(Temporal(files[0], filename, 0.5, 50, 6, 50, 6))
+                jobs.append(Temporal(files[0], filename, 0.8, 50, 6, 50, 6))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
     #jobs = []
