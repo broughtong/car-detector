@@ -1,4 +1,5 @@
 data
+*.swn
 *.txt
 annotations
 visualisation

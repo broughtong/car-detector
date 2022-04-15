@@ -216,7 +216,7 @@ if __name__ == "__main__":
             if filename[-4:] == ".bag":
                 #if filename in rosbagList:
                 jobs.append(Extractor(files[0], filename))
-    maxCores = 2
+    maxCores = 8
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)

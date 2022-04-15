@@ -193,6 +193,32 @@ class Temporal(multiprocessing.Process):
                 if foundCar == True:
                     eroded[mainIdx].append(car)
 
+        #some shitty nms due to interpolated windowing
+        newEroded = []
+        for mainIdx in range(len(scans)):
+            newFrame = []
+
+            for carIdx in range(len(eroded[mainIdx])): #for each car in the current scan:
+                
+                unique = True
+                car = eroded[mainIdx][carIdx]
+                for otherCarIdx in range(carIdx+1, len(eroded[mainIdx])):
+
+                    otherCar = eroded[mainIdx][otherCarIdx]
+
+                    dx = car[0] - otherCar[0]
+                    dy = car[1] - otherCar[1]
+                    dist = ((dx**2) + (dy**2))**0.5
+
+                    if dist < self.detectionDistance:
+                        unique = False
+
+                if unique == True:
+                        newFrame.append(car)
+             
+            newEroded.append(newFrame)
+        eroded = newEroded
+
         #extrapolate
         extrapolated = []
         extrapolatedOnly = []
@@ -299,22 +325,28 @@ class Temporal(multiprocessing.Process):
                                     dx = car[0] - robopose[0] 
                                     dy = car[1] - robopose[1]
                                     dist = ((dx**2) + (dy**2))**0.5
-                    
+
                                     if dist > self.underRobotDistance: #stop detections from under the robot
                                         extrapolated[i].append(car)
                                         extrapolatedOnly[i].append(car)
+
+        #add real detections to extrapolated
+        for frameIdx in range(len(annotationsOdom)):
+            for detectionIdx in range(len(eroded[frameIdx])):
+                extrapolated[frameIdx].append(eroded[frameIdx][detectionIdx])
 
         #some shitty nms due to one extrapolater going forward possibly overlapping one going backwards
         newExtrapolated = []
         for mainIdx in range(len(scans)):
             newFrame = []
-            for carIdx in range(len(extrapolatedOnly[mainIdx])): #for each car in the current scan:
+
+            for carIdx in range(len(extrapolated[mainIdx])): #for each car in the current scan:
                 
                 unique = True
-                car = extrapolatedOnly[mainIdx][carIdx]
-                for otherCarIdx in range(carIdx+1, len(extrapolatedOnly[mainIdx])):
+                car = extrapolated[mainIdx][carIdx]
+                for otherCarIdx in range(carIdx+1, len(extrapolated[mainIdx])):
 
-                    otherCar = extrapolatedOnly[mainIdx][otherCarIdx]
+                    otherCar = extrapolated[mainIdx][otherCarIdx]
 
                     dx = car[0] - otherCar[0]
                     dy = car[1] - otherCar[1]
@@ -324,18 +356,11 @@ class Temporal(multiprocessing.Process):
                         unique = False
 
                 if unique == True:
-                        newFrame.append(car)
+                    newFrame.append(car)
              
             newExtrapolated.append(newFrame)
 
         extrapolated = newExtrapolated
-        extrapolatedOnly = copy.deepcopy(extrapolated)
-
-
-        #add real detections to extrapolated
-        for frameIdx in range(len(annotationsOdom)):
-            for detectionIdx in range(len(eroded[frameIdx])):
-                extrapolated[frameIdx].append(eroded[frameIdx][detectionIdx])
 
         #self.data["annotationsOdom"]  = annotationsOdom
         #self.data["lerpedOdom"] = lerped
@@ -416,10 +441,10 @@ class Temporal(multiprocessing.Process):
         os.makedirs(folder, exist_ok=True)
         for i in range(len(scans)):
 
-            points = np.concatenate([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"], scans[i]["sick_front"]])
+            points = utils.combineScans([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"], scans[i]["sick_front"]])
             
             fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
-            utils.drawImgFromPoints(fn, points, [], [], self.data["extrapolatedOnly"][i], self.data["eroded"][i])
+            utils.drawImgFromPoints(fn, points, [], [], [], self.data["extrapolated"][i])
             self.fileCounter += 1
 
     def lerp(self, a, b, i, rot=False):
@@ -440,9 +465,10 @@ if __name__ == "__main__":
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 #for i in range(0, 1000, 100):
-                jobs.append(Temporal(files[0], filename, 0.8, 50, 6, 50, 6))
+                jobs.append(Temporal(files[0], filename, 0.8, 50, 6, 75, 6))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
+    #jobs = [jobs[0]]
     #jobs = []
     #for i in range(0, 1000, 50):
     #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
