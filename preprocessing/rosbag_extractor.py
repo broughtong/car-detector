@@ -45,6 +45,7 @@ class Extractor(multiprocessing.Process):
 
         self.scanTopics = ["/back_left/sick_safetyscanners/scan", 
                 "/back_right/sick_safetyscanners/scan", 
+                "/back_low/scan",
                 "/front/sick_safetyscanners/scan",
                 "/back_middle/scan"]
 

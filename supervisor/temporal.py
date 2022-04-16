@@ -441,8 +441,7 @@ class Temporal(multiprocessing.Process):
         os.makedirs(folder, exist_ok=True)
         for i in range(len(scans)):
 
-            points = utils.combineScans([scans[i]["sick_back_left"], scans[i]["sick_back_right"], scans[i]["sick_back_middle"], scans[i]["sick_front"]])
-            
+            points = utils.combineScans(scans[i], 4)
             fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
             utils.drawImgFromPoints(fn, points, [], [], [], self.data["extrapolated"][i])
             self.fileCounter += 1
@@ -474,7 +473,7 @@ if __name__ == "__main__":
     #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 12
+    cpuCores = 8
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

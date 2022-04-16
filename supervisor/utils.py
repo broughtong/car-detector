@@ -7,13 +7,15 @@ import numpy as np
 import copy
 import multiprocessing
 
-def combineScans(arrOfScans):
+def combineScans(arrOfScans, vectorSize):
 
-    for i in range(len(arrOfScans)):
-        arrOfScans[i] = np.array(arrOfScans[i])
-        arrOfScans[i] = arrOfScans[i].reshape([arrOfScans[i].shape[0], 3])
+    scans = []
+    for key in arrOfScans.keys():
+        arrOfScans[key] = np.array(arrOfScans[key])
+        arrOfScans[key] = arrOfScans[key].reshape([arrOfScans[key].shape[0], vectorSize])
+        scans.append(arrOfScans[key])
 
-    return np.concatenate(arrOfScans)
+    return np.concatenate(scans)
 
 def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
 

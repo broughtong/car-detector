@@ -385,7 +385,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Annotator(files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 4
+    maxCores = 8
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):
