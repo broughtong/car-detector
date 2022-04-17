@@ -7,12 +7,12 @@ import numpy as np
 import copy
 import multiprocessing
 
-def combineScans(arrOfScans, vectorSize):
+def combineScans(arrOfScans):
 
     scans = []
     for key in arrOfScans.keys():
         arrOfScans[key] = np.array(arrOfScans[key])
-        arrOfScans[key] = arrOfScans[key].reshape([arrOfScans[key].shape[0], vectorSize])
+        arrOfScans[key] = arrOfScans[key].reshape([arrOfScans[key].shape[0], 4])
         scans.append(arrOfScans[key])
 
     return np.concatenate(scans)
@@ -163,7 +163,7 @@ class Visualise(multiprocessing.Process):
     def drawFrame(self, idx):
 
         scans = self.data["lanoising"][idx]
-        scans = combineScans([scans["sick_back_left"], scans["sick_back_right"], scans["sick_back_middle"], scans["sick_front"]])
+        #scans = combineScans([scans["sick_back_left"], scans["sick_back_right"], scans["sick_back_middle"], scans["sick_front"]])
 
         fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
         drawImgFromPoints(fn, scans, [], [], self.data["extrapolated"][idx], [], 3, False)

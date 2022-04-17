@@ -523,7 +523,7 @@ def callback(msg):
             return []
 
         new_points = pc2.create_cloud(None, fields, cloud_points)
-        pc = pc2.read_points(new_points, skip_nans=True, field_names=("x", "y", "z", "i"))
+        pc = pc2.read_points(new_points, skip_nans=True, field_names=("x", "y", "z", "intensity"))
 
         arr = []
         for point in pc:

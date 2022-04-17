@@ -21,7 +21,7 @@ import numpy as np
 
 datasetPath = "../data/results/lanoising"
 annotationSource = "extrapolated"
-laserPointsField = "scans"
+laserPointsField = "lanoising"
 outputPath = "../annotations/" + laserPointsField
 lp = lg.LaserProjection()
 movementThreshold = 0.1
@@ -51,7 +51,7 @@ class Annotator(multiprocessing.Process):
 
         self.annotate()
 
-    def drawCar(self, centreX, centreY, fullHeight, fullWidth, angle, img, debugimg, annotationIdx=None):
+    def drawCar(self, centreX, centreY, fullHeight, fullWidth, angle, img, debugimg=None, annotationIdx=None):
 
         angle = angle % (math.pi * 2)
         alpha = math.cos(angle) * 0.5
@@ -69,15 +69,22 @@ class Annotator(multiprocessing.Process):
             colour = annotationIdx
             cv2.fillPoly(img, pts = [contours], color = colour)
 
-        cv2.fillPoly(debugimg, pts = [contours], color =(255,0,255))
+        if debugimg is not None:
+            cv2.fillPoly(debugimg, pts = [contours], color =(255,0,255))
 
-        debugimg[centreX, centreY] = [255, 0, 255]
-        debugimg[a[0], a[1]] = [125, 0, 128]
-        debugimg[b[0], b[1]] = [125, 255, 0]
-        debugimg[c[0], c[1]] = [125, 255, 0]
-        debugimg[d[0], d[1]] = [125, 255, 0]
+            debugimg[centreX, centreY] = [255, 0, 255]
+            debugimg[a[0], a[1]] = [125, 0, 128]
+            debugimg[b[0], b[1]] = [125, 255, 0]
+            debugimg[c[0], c[1]] = [125, 255, 0]
+            debugimg[d[0], d[1]] = [125, 255, 0]
 
-    def testImg(img):
+    def testImg(self, img):
+        return False
+
+        for rowIdx in range(len(img)):
+            for px in range(len(img[rowIdx])):
+                if img[rowIdx][px] > 0:
+                    print("Here!", rowIdx, px)
 
         mask = np.array(img)
         obj_ids = np.unique(mask)
@@ -88,7 +95,9 @@ class Annotator(multiprocessing.Process):
         num_objs = len(obj_ids)
         boxes = []
         for i in range(num_objs):
+            print(masks[i], obj_ids)
             pos = np.where(masks[i])
+            print(pos, "nini")
             xmin = np.min(pos[1])
             xmax = np.max(pos[1])
             ymin = np.min(pos[0])
@@ -98,10 +107,10 @@ class Annotator(multiprocessing.Process):
                 return True
         return False
 
-    def drawAnnotation(self, img, frame, annotations):
+    def drawAnnotation(self, foldername, frame, annotations):
         
         res = 1024
-        scale = 20
+        scale = 25
         ctr = 0
 
         combineMasks = True
@@ -127,13 +136,17 @@ class Annotator(multiprocessing.Process):
             annotationIdx = 1
             for annotation in annotations:
                 x, y = int(annotation[0]*scale), int(annotation[1]*scale)
-                width, height = int(2.3*scale), int(4.5*scale)
-                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img, annotationIdx)
+                width, height = int(2.4*scale), int(4.85*scale)
+                #self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, img, annotationIdx)
+                self.drawCar(x+(res//2), y+(res//2), width, height, annotation[2], accum, annotationIdx=annotationIdx)
                 annotationIdx += 1
-            fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
-            if testImg(accum):
+            #fn = os.path.join(outputPath, "annotations", self.filename + "-" + str(frame) + ".png")
+            fn = os.path.join(foldername, self.filename + "-" + str(frame) + ".png")
+            if self.testImg(accum):
                 return True
             cv2.imwrite(fn, accum)
+
+        return False
 
     def tripletOrientation(self, a, b, c):
         orr = ((b[1] - a[1]) * (c[0] - b[0])) - ((b[0] - a[0]) * (c[1] - b[1]))
@@ -206,7 +219,28 @@ class Annotator(multiprocessing.Process):
 
         return intersects % 2
 
-    def getAnnotation(self, scan, frameIdx, annotations):
+    def getInAnnotation(self, scan, annotations):
+
+        carPoints = []
+        nonCarPoints = []
+
+        for point in scan:
+
+            inAnnotation = False
+
+            for annotation in annotations:
+                if self.isInsideAnnotation([point[0], point[1]], annotation):
+                    inAnnotation = True
+                    break
+
+            if inAnnotation:
+                carPoints.append(point)
+            else:
+                nonCarPoints.append(point)
+
+        return carPoints, nonCarPoints
+
+    def getAnnotation(self, scan, annotations):
 
         backgroundPoints = []
         points = []
@@ -215,15 +249,15 @@ class Annotator(multiprocessing.Process):
         debugpoints = []
         debugcols = []
 
-        for i in scan:
+        for point in scan:
             inAnnotation = False
             for annotation in annotations:
-                if self.isInsideAnnotation([i[0], i[1]], annotation):
+                if self.isInsideAnnotation([point[0], point[1]], annotation):
                     inAnnotation = True
                     break
             if inAnnotation == False:
-                backgroundPoints.append([i[0], i[1], i[2]])
-                debugbackgroundPoints.append([i[0], i[1], i[2]])
+                backgroundPoints.append([point[0], point[1], point[2]])
+                debugbackgroundPoints.append([point[0], point[1], point[2]])
             else:
                 cols.append([255, 0, 255])
                 points.append([i[0], i[1], i[2]])
@@ -246,8 +280,7 @@ class Annotator(multiprocessing.Process):
         for frame in range(len(self.data[laserPointsField])):
             
             scan = self.data[laserPointsField][frame]
-            combined = utils.combineScans(scan, 4)
-            #combined = utils.combineScans([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"], scan["sick_back_middle"]])
+            combined = utils.combineScans(scan)
             annotations = self.data[annotationSource][frame]
 
             if self.filename not in gtBags:
@@ -266,19 +299,40 @@ class Annotator(multiprocessing.Process):
                     #for training purposes, dont teach on empty images
                     continue
 
+            #draw scan
+            fn = os.path.join(outputPath, "mask", "all", "imgs", self.filename + "-" + str(frame) + ".png")
+            utils.drawImgFromPoints(fn, combined, [], [], [], [], dilation=3)
+            
+            #draw annotations 
+            fn = os.path.join(outputPath, "mask", "all", "annotations")
+            carPoints, nonCarPoints = self.getInAnnotation(combined, annotations)
+            badAnnotation = self.drawAnnotation(fn, frame, annotations)            
+
+            #draw debug
+            fn = os.path.join(outputPath, "mask", "all", "debug", self.filename + "-" + str(frame) + ".png")
+            utils.drawImgFromPoints(fn, combined, [], [], annotations, [], dilation=None)
+
+
+            #backgroundPoints, points, cols, debugbp, debugp, debugcol = self.getAnnotation(combined, annotations)
+            #badAnnotation = self.drawAnnotation(img, frame, annotations)
+            #if badAnnotation:
+            #    continue
+            #img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
+
             #draw raw image, mask image, and debug image
-            backgroundPoints, points, cols, debugbp, debugp, debugcol = self.getAnnotation(combined, frame, annotations)
-            self.pointsToImgsDrawWheels(debugbp, "debug", str(frame), debugp, debugcol)
-            fn = os.path.join(outputPath, location, self.filename + "-" + str(frame) + ".png")
-            utils.drawImgFromPoints(debugbp)
+            #backgroundPoints, points, cols, debugbp, debugp, debugcol = self.getAnnotation(combined, frame, annotations)
 
-            badAnnotation = self.drawAnnotation(img, frame, annotations)
-            if badAnnotation:
-                continue
-            img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
+            #self.pointsToImgsDrawWheels(debugbp, "debug", str(frame), debugp, debugcol)
+            #fn = os.path.join(outputPath, location, self.filename + "-" + str(frame) + ".png")
+            #utils.drawImgFromPoints(debugbp)
 
-            fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
-            cv2.imwrite(fn, img)
+            #badAnnotation = self.drawAnnotation(img, frame, annotations)
+            #if badAnnotation:
+            #    continue
+            #img = self.pointsToImgsDrawWheels(combined, "imgs", str(frame), [], [])
+
+            #fn = os.path.join(outputPath, "debug", self.filename + "-" + str(frame) + ".png")
+            #cv2.imwrite(fn, img)
 
             oldx = x
             oldy = y

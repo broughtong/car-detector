@@ -34,7 +34,6 @@ class Extractor(multiprocessing.Process):
 
         self.filename = filename
         self.path = path
-        self.topicBuf = [None, None, None]
         self.lastX, self.lastY = None, None
         self.distThresh = 0.1
         self.fileCounter = 0
@@ -46,8 +45,12 @@ class Extractor(multiprocessing.Process):
         self.scanTopics = ["/back_left/sick_safetyscanners/scan", 
                 "/back_right/sick_safetyscanners/scan", 
                 "/back_low/scan",
-                "/front/sick_safetyscanners/scan",
-                "/back_middle/scan"]
+                "/back_middle/scan",
+                "/front/sick_safetyscanners/scan"]
+        self.synchroniseToTopic = "/front/sick_safetyscanners/scan" #MUST always be last from above list
+        self.topicBuf = []
+        for _ in range(len(self.scanTopics)-1):
+            self.topicBuf.append(None)
 
     def run(self):
         
@@ -65,11 +68,12 @@ class Extractor(multiprocessing.Process):
         for topic, msg, t in rosbag.Bag(self.path + "/" + self.filename).read_messages():
 
             if topic in self.scanTopics:
-                for i in range(3):
-                    if topic == self.scanTopics[i]:
-                        self.topicBuf[i] = msg
-                if topic == self.scanTopics[-1]:
+                if topic == self.synchroniseToTopic:
                     self.processScan(msg, msg.header.stamp)
+                else:
+                    for i in range(len(self.scanTopics)):
+                        if topic == self.scanTopics[i]:
+                            self.topicBuf[i] = msg
             if topic == "/odom":
                 self.position = msg.pose.pose.position
                 self.orientation = msg.pose.pose.orientation
@@ -186,16 +190,18 @@ class Extractor(multiprocessing.Process):
             return
 
         msgs = copy.deepcopy(self.topicBuf)
-        #self.topicBuf = [None, None, None]
         msgs.append(msg)
 
         if not self.odometryMoved():
             return
-        print("Robot moved!", flush = True)
+        #print("Robot moved!", flush=True)
 
         combined, trans, ts = self.combineScans(msgs, t)
         if len(combined) == 0:
             return
+        for key in combined.keys():
+            combined[key] = np.array(combined[key])
+            combined[key] = combined[key].reshape(combined[key].shape[0], 4)
         self.scans.append(combined)
         self.trans.append(trans)
         self.ts.append(ts)

@@ -441,7 +441,7 @@ class Temporal(multiprocessing.Process):
         os.makedirs(folder, exist_ok=True)
         for i in range(len(scans)):
 
-            points = utils.combineScans(scans[i], 4)
+            points = utils.combineScans(scans[i])
             fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
             utils.drawImgFromPoints(fn, points, [], [], [], self.data["extrapolated"][i])
             self.fileCounter += 1
