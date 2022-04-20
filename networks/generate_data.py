@@ -14,12 +14,12 @@ from matplotlib.patches import Polygon
 labels_out = np.empty((0, 1526))
 data_out = np.empty((0, 1526, 2))
 
-rotationIndex = 2   # how many times rotate one frame
-testingIndex = 5    # ratio of saving to testing folder
+rotationIndex = 6   # how many times rotate one frame
+testingIndex = 6    # ratio of saving to testing folder
 dimIndex = 4    # how many dimensions to keep (in order: 1. x-coord, 2. y-coord, 3. lidar pertinence, 4. intensity)
 
-datasetPath = "../data/results/lanoising-ts5"
-scanField = "scans"
+datasetPath = "../data/results/lanoising"
+scanField = "lanoising"
 outputPath = "./bags/" + datasetPath.split("/")[-1] + "-" + scanField
 os.makedirs(outputPath, exist_ok=True)
 os.makedirs(os.path.join(outputPath, 'training'), exist_ok=True)

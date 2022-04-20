@@ -56,10 +56,16 @@ class CarDetectorDataset():
 
     def count_frames(self):
         for i in range(len(self.bags)):
-            self.cumul_num_frames[i] = sum(self.cumul_num_frames[:i]) + len(os.listdir(self.path + "/" + self.bags[i]))
+            #print(len(os.listdir(self.path + "/" + self.bags[i])), self.bags[i])
+            #self.cumul_num_frames[i] = sum(self.cumul_num_frames[:i]) + len(os.listdir(self.path + "/" + self.bags[i]))
+            if i > 0:
+                self.cumul_num_frames[i] = self.cumul_num_frames[i-1] + len(os.listdir(self.path + "/" + self.bags[i]))
+            else:
+                self.cumul_num_frames[i] = len(os.listdir(self.path + "/" + self.bags[i]))
 
     def __getitem__(self, index):
 
+        orig_index = index
         bag_id = np.min(np.nonzero(index < self.cumul_num_frames))
         index = index - (self.cumul_num_frames[bag_id-1] if bag_id > 0 else 0)
 

@@ -25,7 +25,7 @@ annotationSource = "extrapolated"
 laserPointsFields = ["scans", "lanoising"]
 outputPath = "../annotations/"
 lp = lg.LaserProjection()
-movementThreshold = 0.1
+movementThreshold = 5.0
 gtPath = "../data/gt"
 gtBags = []
 
@@ -280,6 +280,22 @@ class Annotator(multiprocessing.Process):
 
         return backgroundPoints, points, cols, debugbackgroundPoints, debugpoints, debugcols
 
+    def saveCloud(self, filename, scan):
+
+        #scan is just array of points, put them into file
+        pass
+
+    def saveAnnotations(self, filename, scan, annotations):
+
+        return
+        for annotation in annotations:
+            poly = self.getBoundaryPoints(annotation)
+            for i in poly:
+                debugpoints.append(i)
+                debugcols.append([255, 0, 0])
+            debugpoints.append([annotation[0], annotation[1]])
+            debugcols.append([0, 25, 255])
+
     def annotate(self):
 
         oldx, oldy, = 999, 999
@@ -298,6 +314,8 @@ class Annotator(multiprocessing.Process):
 
                 if dist < movementThreshold:
                     continue
+                oldx = x
+                oldy = y
                 if len(annotations) == 0:
                     #for training purposes, dont teach on empty images
                     continue
@@ -308,9 +326,6 @@ class Annotator(multiprocessing.Process):
                 combined = utils.combineScans(scan)
 
                 #augmentations
-                #flipH = True
-                #flipV = True
-                #rotatations = [0, math.pi/2, math.pi, 3*math.pi/2]
                 for rotation in rotations:
 
                     r = np.identity(4)
@@ -335,17 +350,20 @@ class Annotator(multiprocessing.Process):
                         newAnnotations[i] = [*v, o]
 
                     #raw
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0.png")
+                    fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
                     utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3)
                     
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0.png")
+                    fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
                     carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
-                    badAnnotation = self.drawAnnotation(fn, frame, newAnnotations) 
+                    badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
 
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0.png")
+                    fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
                     utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
 
-                    #pointnet
+                    fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
+                    self.saveCloud(fn, newScan)
+                    fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
+                    self.saveAnnotations(fn, newScan, newAnnotations)
 
                     if flipV:
 
@@ -357,20 +375,20 @@ class Annotator(multiprocessing.Process):
                             fAnnotations[i][0] = -fAnnotations[i][0]
                             fAnnotations[i][2] = -fAnnotations[i][2]
 
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0V.png")
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
                         utils.drawImgFromPoints(fn, fScan, [], [], [], [], dilation=3)
                         
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0V.png")
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
                         carPoints, nonCarPoints = self.getInAnnotation(fScan, fAnnotations)
                         badAnnotation = self.drawAnnotation(fn, frame, fAnnotations) 
 
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-0V.png")
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
                         utils.drawImgFromPoints(fn, fScan, [], [], fAnnotations, [], dilation=None)
 
-            break
-            
-            oldx = x
-            oldy = y
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.")
+                        self.saveCloud(fn, newScan)
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.")
+                        self.saveAnnotations(fn, newScan, newAnnotations)
 
 if __name__ == "__main__":
 
@@ -385,14 +403,15 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "imgs"), exist_ok=True)
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "annotations"), exist_ok=True)
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "debug"), exist_ok=True)
-        os.makedirs(os.path.join(outputPath, scanField, "pointnet", "all"), exist_ok=True)
+        os.makedirs(os.path.join(outputPath, scanField, "pointcloud", "cloud"), exist_ok=True)
+        os.makedirs(os.path.join(outputPath, scanField, "pointcloud", "annotations"), exist_ok=True)
+        os.makedirs(os.path.join(outputPath, scanField, "pointcloud", "debug"), exist_ok=True)
     
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 jobs.append(Annotator(files[0], filename))
-                break
     print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 8
     limit = cpuCores
