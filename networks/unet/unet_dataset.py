@@ -29,7 +29,7 @@ class UNetCarDataset(torch.utils.data.Dataset):
         for i in range(len(self.bags)):
             #self.cumul_num_frames[i] = sum(self.cumul_num_frames[:i]) + len(os.listdir(self.path + "/" + self.bags[i]))
             if i > 0:
-                self.cumul_num_frames[i] = sum(self.cumul_num_frames[i-1]) + len(os.listdir(self.path + "/" + self.bags[i]))
+                self.cumul_num_frames[i] = self.cumul_num_frames[i-1] + len(os.listdir(self.path + "/" + self.bags[i]))
             else:
                 self.cumul_num_frames[i] = len(os.listdir(self.path + "/" + self.bags[i]))
 
