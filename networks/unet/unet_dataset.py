@@ -6,9 +6,10 @@ import torch
 
 
 class UNetCarDataset(torch.utils.data.Dataset):
-    def __init__(self, path, trn, H=512, W=512, resolution=0.075):
+    def __init__(self, path, num_classes=2, trn=True, H=512, W=512, resolution=0.075):
         super().__init__()
         self.path = path
+        self.num_classes = num_classes
         self.H = H
         self.W = W
         self.resolution = resolution

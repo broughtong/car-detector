@@ -4,10 +4,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 import argparse
-#from sklearn.model_selection import train_test_split
+# from sklearn.model_selection import train_test_split
 from model_unet import SmallerUnet, ZDUNet
 from unet_dataset import UNetCarDataset
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bs', type=int, default=16, help='input batch size')
@@ -22,6 +21,7 @@ parser.add_argument('--weight', type=float, default=1, help="weight of loss for 
 parser.add_argument('--gpu', type=int, default=0, help="specify gpu")
 parser.add_argument('--start_epoch', type=int, default=0, help="specify the first epoch number to be persisted")
 parser.add_argument('--dataset', type=str, help="specify dataset")
+parser.add_argument('--numc', type=int, default=2, help="number of classes")
 parser.add_argument('--lanoise', action='store_true', help="train on lanoised data")
 opt = parser.parse_args()
 
@@ -30,8 +30,8 @@ def save_model(model, destination):
     torch.save(model.state_dict(), destination, _use_new_zipfile_serialization=False)
 
 
-def load_model():
-    model = ZDUNet(num_classes=3)
+def load_model(num_classes=2):
+    model = ZDUNet(num_classes=num_classes)
     model.load_state_dict(torch.load(opt.model, map_location='cpu'))
     return model
 
@@ -52,7 +52,14 @@ except OSError:
     pass
 log_file = '%s/log.txt' % opt.outf
 f = open(log_file, 'a+')
-f.write("bs: {}, n_epochs: {}, lr: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, lanoise: {}\n".format(opt.bs, opt.nepoch, opt.lr, opt.optim,opt.momentum, opt.weight_decay, opt.weight, opt.lanoise))
+f.write("bs: {}, n_epochs: {}, lr: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, lanoise: {}\n".format(opt.bs,
+                                                                                                                 opt.nepoch,
+                                                                                                                 opt.lr,
+                                                                                                                 opt.optim,
+                                                                                                                 opt.momentum,
+                                                                                                                 opt.weight_decay,
+                                                                                                                 opt.weight,
+                                                                                                                 opt.lanoise))
 f.close()
 
 device = get_device(opt.gpu)
@@ -60,22 +67,21 @@ device = get_device(opt.gpu)
 # new datasets
 data_path = "/datafast/janota/lanoising-ts4-"
 if opt.lanoise:
-	data_path += "lanoising"
+    data_path += "lanoising"
 else:
-	data_path += "scans"
+    data_path += "scans"
 
-trn_dataset = UNetCarDataset(path=data_path, trn=True)
-val_dataset = UNetCarDataset(path=data_path, trn=False)
+trn_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=True)
+val_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=False)
 
 trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=opt.bs, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=opt.bs, shuffle=True)
 
-
 # init model
 if opt.model != '':
-    model = load_model().to(device)
+    model = load_model(num_classes=opt.numc).to(device)
 else:
-    model = ZDUNet(num_classes=3).to(device)
+    model = ZDUNet(num_classes=opt.numc).to(device)
 
 # init optimizer
 if opt.optim == 'sgd':
@@ -83,13 +89,15 @@ if opt.optim == 'sgd':
 else:
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, weight_decay=opt.weight_decay)
 
-#class_weight = torch.tensor((opt.weight, 1.), dtype=torch.float32).to(device)
-#class_weight = torch.tensor((0.0004, 0.15, 1.), dtype=torch.float32).to(device)
-class_weight = torch.tensor((0.0000001, 0.5, 1.), dtype=torch.float32).to(device)
+if opt.numc == 2:
+    class_weight = torch.tensor((opt.weight, 1.), dtype=torch.float32).to(device)
+else:
+    # class_weight = torch.tensor((0.0004, 0.15, 1.), dtype=torch.float32).to(device)
+    class_weight = torch.tensor((0.0000001, 0.5, 1.), dtype=torch.float32).to(device)
 criterion = nn.CrossEntropyLoss(weight=class_weight).to(device)
 
 shape = 512 * 512
-#shape = 128 * 128
+# shape = 128 * 128
 
 """def weight_loss(prediction, label):
     #print(prediction.shape, label.shape)
@@ -109,7 +117,6 @@ shape = 512 * 512
     return torch.sum(losses) / torch.sum(weights)
 """
 
-
 # **** TRAINING LOOP ****
 print("Training started")
 for epoch in range(opt.start_epoch, opt.nepoch):
@@ -126,70 +133,32 @@ for epoch in range(opt.start_epoch, opt.nepoch):
     for it, batch in enumerate(trn_loader):
         if it % 100 == 0:
             now = time.time()
-            print(f".  Iteration {it} / {total_batch_num} - elapsed {int(now - start_iter)/60} min, total {int(now - start)/60} min")
+            print(
+                f".  Iteration {it} / {total_batch_num} - elapsed {int(now - start_iter) / 60} min, total {int(now - start) / 60} min")
             start_iter = now
         input_data = batch['data'].to(device).requires_grad_()
         label = batch['labels'].to(device)
-        
-        #print("predicting batch")
+
+        # print("predicting batch")
         predictions = model(input_data)
         loss = criterion(predictions, label)
-        #loss = weight_loss(predictions, label)
+        # loss = weight_loss(predictions, label)
         loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
 
         loss_list.append(loss.item())
-        
+
         pred = torch.argmax(predictions, dim=1).to(device)
-        # conf_vector = pred/label
-        # TP_t += torch.sum(conf_vector == 1).item()  # pred=1 and label=1
-        # FP_t += torch.sum(conf_vector == float('inf')).item()  # pred=1 and label=0
-        # TN_t += torch.sum(torch.isnan(conf_vector)).item()  # pred=0 and label=0
-        # FN_t += torch.sum(conf_vector == 0).item()  # pred=0 and label=1
 
-        CB += torch.sum((pred == 2) & (label == 0)).item()
-        CN += torch.sum((pred == 2) & (label == 1)).item()
-        CC += torch.sum((pred == 2) & (label == 2)).item()
-        NB += torch.sum((pred == 1) & (label == 0)).item()
-        NN += torch.sum((pred == 1) & (label == 1)).item()
-        NC += torch.sum((pred == 1) & (label == 2)).item()
-        BB += torch.sum((pred == 0) & (label == 0)).item()
-        BN += torch.sum((pred == 0) & (label == 1)).item()
-        BC += torch.sum((pred == 0) & (label == 2)).item()
-        
-
-        #print(f"batch took {(time.time() - start)} s")     
-        #print(TP_t, FP_t, TN_t, FN_t)
-    #print(TP_t, FP_t, TN_t, FN_t)#, TP_t/(TP_t+FP_t), TP_t/(TP_t+FN_t))
-    
-    trn_cnf = f"training: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
-    print(trn_cnf)
-    
-    # VALIDATION
-    TP = FP = TN = FN = 0
-    CB = CN = CC = NB = NN = NC = BB = BN = BC = 0
-    with torch.no_grad():
-        model.eval()
-        # confusion_matrix = np.zeros((2, 2))
-        for it_val, batch in enumerate(val_loader):
-            data = batch['data'].to(device)
-            label = batch['labels'].to(device)      # NxHxW
-
-            output = model(data)    # Nx2xHxW
-            # loss = torch.nn.functional.cross_entropy(output, label, weight=torch.tensor((opt.weight,1), dtype=torch.float32))
-            loss = torch.nn.functional.cross_entropy(output, label, weight=class_weight)
-            #loss = weight_loss(output, label)
-            loss_val.append(loss.item())
-
-            pred = torch.argmax(output, dim=1).to(device)
-            # conf_vector = pred / label
-            # TP += torch.sum(conf_vector == 1).item()     # pred=1 and label=1
-            # FP += torch.sum(conf_vector == float('inf')).item()      # pred=1 and label=0
-            # TN += torch.sum(torch.isnan(conf_vector)).item()     # pred=0 and label=0
-            # FN += torch.sum(conf_vector == 0).item()     # pred=0 and label=1'''
-            
+        if opt.numc == 2:
+            conf_vector = pred/label
+            TP_t += torch.sum(conf_vector == 1).item()  # pred=1 and label=1
+            FP_t += torch.sum(conf_vector == float('inf')).item()  # pred=1 and label=0
+            TN_t += torch.sum(torch.isnan(conf_vector)).item()  # pred=0 and label=0
+            FN_t += torch.sum(conf_vector == 0).item()  # pred=0 and label=1
+        else:
             CB += torch.sum((pred == 2) & (label == 0)).item()
             CN += torch.sum((pred == 2) & (label == 1)).item()
             CC += torch.sum((pred == 2) & (label == 2)).item()
@@ -200,12 +169,58 @@ for epoch in range(opt.start_epoch, opt.nepoch):
             BN += torch.sum((pred == 0) & (label == 1)).item()
             BC += torch.sum((pred == 0) & (label == 2)).item()
 
-    #print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
-    val_cnf = f"validation: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
-    print(val_cnf)
+        # print(f"batch took {(time.time() - start)} s")
+        # print(TP_t, FP_t, TN_t, FN_t)
+
+    if opt.numc == 2:
+        print(TP_t, FP_t, TN_t, FN_t)   #, TP_t/(TP_t+FP_t), TP_t/(TP_t+FN_t))
+    else:
+        trn_cnf = f"training: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
+        print(trn_cnf)
+
+    # VALIDATION
+    TP = FP = TN = FN = 0
+    CB = CN = CC = NB = NN = NC = BB = BN = BC = 0
+    with torch.no_grad():
+        model.eval()
+        # confusion_matrix = np.zeros((2, 2))
+        for it_val, batch in enumerate(val_loader):
+            data = batch['data'].to(device)
+            label = batch['labels'].to(device)  # NxHxW
+
+            output = model(data)  # Nx2xHxW
+            # loss = torch.nn.functional.cross_entropy(output, label, weight=torch.tensor((opt.weight,1), dtype=torch.float32))
+            loss = torch.nn.functional.cross_entropy(output, label, weight=class_weight)
+            # loss = weight_loss(output, label)
+            loss_val.append(loss.item())
+
+            pred = torch.argmax(output, dim=1).to(device)
+
+            if opt.numc == 2:
+                conf_vector = pred / label
+                TP += torch.sum(conf_vector == 1).item()     # pred=1 and label=1
+                FP += torch.sum(conf_vector == float('inf')).item()      # pred=1 and label=0
+                TN += torch.sum(torch.isnan(conf_vector)).item()     # pred=0 and label=0
+                FN += torch.sum(conf_vector == 0).item()     # pred=0 and label=1'''
+            else:
+                CB += torch.sum((pred == 2) & (label == 0)).item()
+                CN += torch.sum((pred == 2) & (label == 1)).item()
+                CC += torch.sum((pred == 2) & (label == 2)).item()
+                NB += torch.sum((pred == 1) & (label == 0)).item()
+                NN += torch.sum((pred == 1) & (label == 1)).item()
+                NC += torch.sum((pred == 1) & (label == 2)).item()
+                BB += torch.sum((pred == 0) & (label == 0)).item()
+                BN += torch.sum((pred == 0) & (label == 1)).item()
+                BC += torch.sum((pred == 0) & (label == 2)).item()
+
+    if opt.numc == 2:
+        print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+    else:
+        val_cnf = f"validation: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
+        print(val_cnf)
 
     print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.12f} \t')
-    print(f"epoch took {(time.time() - start) / 60} mins")     
+    print(f"epoch took {(time.time() - start) / 60} mins")
     # print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.3f} \t Val Loss: {sum(loss_val) / (it_val + 1):.3f}')
     '''f = open(log_file, 'a+')
     f.write("Epoch {} started\n".format(epoch))
@@ -214,7 +229,8 @@ for epoch in range(opt.start_epoch, opt.nepoch):
     f.write("TP: {}, FP: {}, TN: {}, FN: {}, P: {}, R: {}\n".format(TP, FP, TN, FN, TP/(TP+FP), TP/(TP+FN)))
     f.close()'''
     with open(log_file, "a+") as f:
-        f.write(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.5f} \t Val Loss: {sum(loss_val) / (it_val + 1):.5f}\n')
+        f.write(
+            f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.5f} \t Val Loss: {sum(loss_val) / (it_val + 1):.5f}\n')
         f.write(trn_cnf)
         f.write(val_cnf)
-    save_model(model, opt.outf+'/'+'epoch'+str(epoch)+'.pth')
+    save_model(model, opt.outf + '/' + 'epoch' + str(epoch) + '.pth')

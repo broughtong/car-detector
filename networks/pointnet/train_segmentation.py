@@ -51,11 +51,13 @@ opt = parser.parse_args()
 # init dataset
 data_path = "../../../../datafast/janota/lanoising-ts4-"
 if opt.lanoise:
-	data_path += "lanoising"
+    data_path += "lanoising"
 else:
-	data_path += "scans"
-trn_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024, normalize=opt.normalize, trn=True)
-val_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024, normalize=opt.normalize, trn=False)
+    data_path += "scans"
+trn_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024,
+                                                      normalize=opt.normalize, trn=True)
+val_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024,
+                                                      normalize=opt.normalize, trn=False)
 trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=opt.bs, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=opt.bs, shuffle=True)
 
@@ -73,8 +75,10 @@ except OSError:
 log_file = '%s/log.txt' % opt.outf
 f = open(log_file, 'a+')
 f.write("bs: {}, n_epochs: {}, lr: {}, feature_trans: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, "
-        "numc: {}, normalize: {}, lanoise {}\n".format(opt.bs, opt.nepoch, opt.lr, opt.feature_transform, opt.optim, opt.momentum,
-        opt.weight_decay, opt.weight, opt.numc, opt.normalize, opt.lanoise))
+        "num_classes: {}, normalize: {}, lanoise {}\n".format(opt.bs, opt.nepoch, opt.lr, opt.feature_transform,
+                                                              opt.optim, opt.momentum,
+                                                              opt.weight_decay, opt.weight, opt.numc, opt.normalize,
+                                                              opt.lanoise))
 f.close()
 
 # init model
@@ -84,7 +88,8 @@ if opt.model != '':
 
 # init optimization
 if opt.optim == 'sgd':
-    optimizer = torch.optim.SGD(classifier.parameters(), lr=opt.lr, momentum=opt.momentum, weight_decay=opt.weight_decay)
+    optimizer = torch.optim.SGD(classifier.parameters(), lr=opt.lr, momentum=opt.momentum,
+                                weight_decay=opt.weight_decay)
 elif opt.optim == 'amsgrad':
     optimizer = torch.optim.Adam(classifier.parameters(), lr=opt.lr, weight_decay=opt.weight_decay, amsgrad=True)
 else:
@@ -146,9 +151,11 @@ for epoch in range(opt.nepoch):
 
         acc = accuracy(torch.cat(output_list), torch.cat(label_list))
 
-    print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}')
+    print(
+        f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}')
     f = open(log_file, 'a+')
     f.write("Epoch {} started\n".format(epoch))
-    f.write(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}\n')
+    f.write(
+        f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}\n')
     f.close()
     torch.save(classifier.state_dict(), '%s/epoch_%d.pth' % (opt.outf, epoch))
