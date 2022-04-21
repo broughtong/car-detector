@@ -173,10 +173,10 @@ for epoch in range(opt.start_epoch, opt.nepoch):
         # print(TP_t, FP_t, TN_t, FN_t)
 
     if opt.numc == 2:
-        print(TP_t, FP_t, TN_t, FN_t)   #, TP_t/(TP_t+FP_t), TP_t/(TP_t+FN_t))
+        trn_cnf = f"TP: {TP_t}, FP: {FP_t}, TN: {TN_t}, FN: {FN_t}"
     else:
         trn_cnf = f"training: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
-        print(trn_cnf)
+    print(trn_cnf)
 
     # VALIDATION
     TP = FP = TN = FN = 0
@@ -214,23 +214,16 @@ for epoch in range(opt.start_epoch, opt.nepoch):
                 BC += torch.sum((pred == 0) & (label == 2)).item()
 
     if opt.numc == 2:
-        print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+        val_cnf = f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}"
     else:
         val_cnf = f"validation: CB = {CB}, CN = {CN}, CC = {CC}, NB = {NB}, NN = {NN}, NC = {NC}, BB = {BB}, BN = {BN}, BC = {BC}, TOT = {CB + CN + CC + NB + NN + NC + BB + BN + BC}"
-        print(val_cnf)
+    print(val_cnf)
 
     print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.12f} \t')
     print(f"epoch took {(time.time() - start) / 60} mins")
-    # print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.3f} \t Val Loss: {sum(loss_val) / (it_val + 1):.3f}')
-    '''f = open(log_file, 'a+')
-    f.write("Epoch {} started\n".format(epoch))
-    f.write(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.3f} \t Val Loss: {sum(loss_val) / (it_val + 1):.3f}\n')
-    f.write("TP: {}, FP: {}, TN: {}, FN: {}, P: {}, R: {}\n".format(TP_t, FP_t, TN_t, FN_t, TP_t/(TP_t+FP_t), TP_t/(TP_t+FN_t)))
-    f.write("TP: {}, FP: {}, TN: {}, FN: {}, P: {}, R: {}\n".format(TP, FP, TN, FN, TP/(TP+FP), TP/(TP+FN)))
-    f.close()'''
+
     with open(log_file, "a+") as f:
-        f.write(
-            f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.5f} \t Val Loss: {sum(loss_val) / (it_val + 1):.5f}\n')
+        f.write(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (it + 1):.5f} \t Val Loss: {sum(loss_val) / (it_val + 1):.5f}\n')
         f.write(trn_cnf)
         f.write(val_cnf)
     save_model(model, opt.outf + '/' + 'epoch' + str(epoch) + '.pth')

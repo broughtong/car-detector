@@ -151,11 +151,9 @@ for epoch in range(opt.nepoch):
 
         acc = accuracy(torch.cat(output_list), torch.cat(label_list))
 
-    print(
-        f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}')
+    print(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}')
     f = open(log_file, 'a+')
     f.write("Epoch {} started\n".format(epoch))
-    f.write(
-        f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}\n')
+    f.write(f'Epoch: {epoch:03d} \t Trn Loss: {sum(loss_list) / (i + 1):.3f} \t Val Loss: {sum(loss_val) / (j + 1):.3f} Acc: {acc:.3f}\n')
     f.close()
     torch.save(classifier.state_dict(), '%s/epoch_%d.pth' % (opt.outf, epoch))
