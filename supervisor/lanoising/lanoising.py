@@ -22,9 +22,8 @@ from tensorflow.python.keras.backend import set_session
 
 lp = lg.LaserProjection()
 
-datasetPath = "../../data/results/temporal-new-0.8-50-6-75-6"
+datasetPath = "../../data/results/temporal-new-0.8-50-6-75-6/"
 outputPath = "../../data/results/lanoising"
-os.makedirs(outputPath, exist_ok=True)
 
 # functions for MDN
 def elu_modif(x, a=1.):
@@ -100,11 +99,11 @@ def callback_ls(msg):
     msg = lp.projectLaser(msg)
     callback(msg)
 
-def processBag(path, filename):
+def processBag(path, folder, filename):
 
-    print("Opening %s %s" % (path, filename))
+    print("Opening %s %s %s" % (path, folder, filename))
     data = []
-    with open(os.path.join(path, filename), "rb") as f:
+    with open(os.path.join(path, folder, filename), "rb") as f:
         data = pickle.load(f)
 
     newScans = []
@@ -120,8 +119,9 @@ def processBag(path, filename):
         newScans.append(frm)
     data["lanoising"] = newScans
 
-    print("Saving File %s %s" % (path, filename))
-    with open(os.path.join(outputPath, filename), "wb") as f:
+    print("Saving File %s %s %s" % (path, folder, filename))
+    os.makedirs(os.path.join(outputPath, folder), exist_ok=True)
+    with open(os.path.join(outputPath, folder, filename), "wb") as f:
         pickle.dump(data, f, protocol=2)
 
 sess = tf.Session()
@@ -582,11 +582,11 @@ if __name__ == '__main__':
     mdn1_intensity._make_predict_function()
     mdn2_intensity._make_predict_function()
 
+    #os.makedirs(outputPath, exist_ok=True)
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
-                try:
-                    processBag(files[0], filename)
-                except:
-                    pass
+                path = datasetPath
+                folder = files[0][len(path):]
+                processBag(path, folder, filename)
 

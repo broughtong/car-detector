@@ -29,11 +29,12 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Extractor(multiprocessing.Process):
-    def __init__(self, path, filename):
+    def __init__(self, path, folder, filename):
         multiprocessing.Process.__init__(self)
 
-        self.filename = filename
         self.path = path
+        self.folder = folder
+        self.filename = filename
         self.lastX, self.lastY = None, None
         self.distThresh = 0.1
         self.fileCounter = 0
@@ -44,7 +45,6 @@ class Extractor(multiprocessing.Process):
 
         self.scanTopics = ["/back_left/sick_safetyscanners/scan", 
                 "/back_right/sick_safetyscanners/scan", 
-                "/back_low/scan",
                 "/back_middle/scan",
                 "/front/sick_safetyscanners/scan"]
         self.synchroniseToTopic = "/front/sick_safetyscanners/scan" #MUST always be last from above list
@@ -54,19 +54,17 @@ class Extractor(multiprocessing.Process):
 
     def run(self):
         
-        print("Process spawned for file %s" % (self.filename), flush = True)
-        time.sleep(1)
+        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush = True)
 
         print("Reading tfs", flush = True)
         try:
             with suppress_stdout_stderr():
-                 self.bagtf = BagTfTransformer(self.path + "/" + self.filename)
+                self.bagtf = BagTfTransformer(os.path.join(self.path, self.folder, self.filename))
         except:
             print("Process finished, bag failed for file %s" % (self.filename), flush = True)
             return
         print("Reading bag", flush = True)
-        for topic, msg, t in rosbag.Bag(self.path + "/" + self.filename).read_messages():
-
+        for topic, msg, t in rosbag.Bag(os.path.join(self.path, self.folder, self.filename)).read_messages():
             if topic in self.scanTopics:
                 if topic == self.synchroniseToTopic:
                     self.processScan(msg, msg.header.stamp)
@@ -175,10 +173,12 @@ class Extractor(multiprocessing.Process):
     def saveScans(self):
 
         if len(self.scans) == 0:
+            print("Skipping saving empty bag")
             return
 
-        os.makedirs(outputPath, exist_ok=True)
-        fn = os.path.join(outputPath, self.filename + ".pickle")
+        os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
+        fn = os.path.join(outputPath, self.folder, self.filename + ".pickle")
+        print("Writing %s" % (fn))
         with open(fn, "wb") as f:
             pickle.dump({"scans": self.scans, "trans": self.trans, "ts": self.ts}, f, protocol=2)
 
@@ -187,6 +187,10 @@ class Extractor(multiprocessing.Process):
         t = rospy.Time(t.secs, t.nsecs)
 
         if None in self.topicBuf:
+            print("None in topic buf!")
+            for idx in range(len(self.topicBuf)):
+                if self.topicBuf[idx] is None:
+                    print("Topic missing: ", self.scanTopics[idx])
             return
 
         msgs = copy.deepcopy(self.topicBuf)
@@ -209,27 +213,31 @@ class Extractor(multiprocessing.Process):
 
 if __name__ == "__main__":
 
-    rosbagList = []
-    with open("./rosbagList") as f:
-        rosbagList = f.read()
-    rosbagList = rosbagList.split("\n")
-    rosbagList = list(filter(None, rosbagList))
-    rosbagList = [x.split(" ")[0] + ".bag" for x in rosbagList]
-    print(rosbagList)
+    #rosbagList = []
+    #with open("./rosbagList") as f:
+    #    rosbagList = f.read()
+    #rosbagList = rosbagList.split("\n")
+    #rosbagList = list(filter(None, rosbagList))
+    #rosbagList = [x.split(" ")[0] + ".bag" for x in rosbagList]
+    #print(rosbagList)
 
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-4:] == ".bag":
+                path = datasetPath
+                folder = files[0][len(path):]
                 #if filename in rosbagList:
-                jobs.append(Extractor(files[0], filename))
-    maxCores = 8
+                jobs.append(Extractor(path, folder, filename))
+    #jobs = jobs[:1]
+    maxCores = 16
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)
     for i in range(len(jobs)):
         if i < limit:
             jobs[i].start()
+            time.sleep(0.2)
         else:
             for j in range(limit):
                 jobs[j].join()

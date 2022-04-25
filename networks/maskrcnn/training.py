@@ -10,7 +10,8 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-datasetPath = "../../annotations/scans/mask"
+field = "lanoising"
+datasetPath = "../../annotations/" + field + "/mask"
 
 class Dataset(object):
     def __init__(self, root, transforms):
@@ -118,7 +119,7 @@ def main():
         lr_scheduler.step()
         evaluate(model, data_loader_test, device=device)
 
-        modelpath = datetime.datetime.now().strftime("models/%d-%m-%y-%H_%M_%S.pth")
+        modelpath = datetime.datetime.now().strftime("models/" + field + "-%d-%m-%y-%H_%M_%S.pth")
         os.makedirs("./models", exist_ok=True)
         torch.save(model, modelpath)
 
