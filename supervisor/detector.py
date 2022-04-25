@@ -22,10 +22,11 @@ def euclidean_distance(x_1, x_2, y_1, y_2):
     return math.sqrt((x_1-x_2)*(x_1-x_2)+(y_1-y_2)*(y_1-y_2))
 
 class Annotator(multiprocessing.Process):
-    def __init__(self, path, filename):
+    def __init__(self, path, folder, filename):
         multiprocessing.Process.__init__(self)
 
         self.path = path
+        self.folder = folder
         self.filename = filename
         self.fileCounter = 0
         self.detections = []
@@ -33,10 +34,10 @@ class Annotator(multiprocessing.Process):
 
     def run(self):
         
-        print("Process spawned for file %s %s" % (self.path, self.filename))
+        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
 
         try:
-            with open(self.path + self.filename, "rb") as f:
+            with open(os.path.join(self.path, self.folder, self.filename), "rb") as f:
                 self.data = pickle.load(f)
         except:
             return
@@ -51,8 +52,8 @@ class Annotator(multiprocessing.Process):
             self.fileCounter += 1
         
         self.data["annotations"] = self.detections
-        os.makedirs(outputPath, exist_ok=True)
-        fn = os.path.join(outputPath, self.filename)
+        os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
+        fn = os.path.join(outputPath, self.folder, self.filename)
         with open(fn, "wb") as f:
             print("Writing to ", fn)
             pickle.dump(self.data, f, protocol=2)
@@ -383,9 +384,11 @@ if __name__ == "__main__":
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
-            jobs.append(Annotator(files[0], filename))
+            path = datasetPath
+            folder = files[0][len(path):]
+            jobs.append(Annotator(path, folder, filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 8
+    maxCores = 9
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):

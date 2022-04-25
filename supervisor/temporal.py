@@ -18,7 +18,7 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/results/detector-s"
+datasetPath = "../data/results/detector-s/"
 outputPath = "../data/results/temporal-new-"
 visualisationPath = "../visualisation/temporal-prc-"
 
@@ -29,11 +29,12 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Temporal(multiprocessing.Process):
-    def __init__(self, path, filename, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired):
+    def __init__(self, path, folder, filename, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired):
         multiprocessing.Process.__init__(self)
 
-        self.filename = filename
         self.path = path
+        self.folder = folder
+        self.filename = filename
         self.detectionDistance = detectionDistance
         self.interpolateFrames = interpolateFrames
         self.interpolateRequired = interpolateRequired
@@ -43,15 +44,17 @@ class Temporal(multiprocessing.Process):
 
     def run(self):
 
-        print("Process spawned for file %s" % (self.filename), flush = True)
-        folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
-        if os.path.isfile(os.path.join(folder, self.filename)):
-            if os.path.getsize(os.path.join(folder, self.filename)) > 0:
+        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush=True)
+
+        foldername = os.path.join(outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
+        #folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
+        if os.path.isfile(os.path.join(foldername, self.filename)):
+            if os.path.getsize(os.path.join(foldername, self.filename)) > 0:
                 #print("Skipping, exists...")
                 #return
                 pass
 
-        with open(os.path.join(self.path, self.filename), "rb") as f:
+        with open(os.path.join(self.path, self.folder, self.filename), "rb") as f:
             self.data = pickle.load(f)
 
         self.temporal()
@@ -61,9 +64,10 @@ class Temporal(multiprocessing.Process):
         #self.data["ts"] = []
         #self.data["annotations"] = []
         
-        folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
-        os.makedirs(folder, exist_ok=True)
-        with open(os.path.join(folder, self.filename), "wb") as f:
+        #foldername = os.path.join(outputPath, "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
+        #folder = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
+        os.makedirs(foldername, exist_ok=True)
+        with open(os.path.join(foldername, self.filename), "wb") as f:
             pickle.dump(self.data, f, protocol=2)
 
     def temporal(self):
@@ -438,11 +442,11 @@ class Temporal(multiprocessing.Process):
 
         self.fileCounter = 0
         folder = visualisationPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
-        os.makedirs(folder, exist_ok=True)
+        os.makedirs(os.path.join(folder, self.folder), exist_ok=True)
         for i in range(len(scans)):
 
             points = utils.combineScans(scans[i])
-            fn = os.path.join(folder, "%s-%s.png" % (self.filename, self.fileCounter))
+            fn = os.path.join(folder, self.folder, "%s-%s.png" % (self.filename, self.fileCounter))
             utils.drawImgFromPoints(fn, points, [], [], [], self.data["extrapolated"][i])
             self.fileCounter += 1
 
@@ -464,7 +468,9 @@ if __name__ == "__main__":
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 #for i in range(0, 1000, 100):
-                jobs.append(Temporal(files[0], filename, 0.8, 50, 6, 75, 6))
+                path = datasetPath
+                folder = files[0][len(path):]
+                jobs.append(Temporal(path, folder, filename, 0.8, 50, 6, 75, 6))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
     #jobs = [jobs[0]]
@@ -473,7 +479,7 @@ if __name__ == "__main__":
     #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 8
+    cpuCores = 9
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
