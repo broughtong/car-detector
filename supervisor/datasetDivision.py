@@ -2,7 +2,7 @@ import os
 
 testingSplit = 10 # 1bag in 10
 
-datasetPath = "../annotations/maskrcnn-la"
+datasetPath = "../annotations/scans/mask/"
 gtPath = "../data/gt"
 
 os.makedirs(os.path.join(datasetPath, "training", "imgs"), exist_ok=True)

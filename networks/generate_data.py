@@ -15,11 +15,11 @@ labels_out = np.empty((0, 1526))
 data_out = np.empty((0, 1526, 2))
 
 rotationIndex = 2   # how many times rotate one frame
-testingIndex = 5    # ratio of saving to testing folder
-dimIndex = 4    # how many dimensions to keep (in order: 1. x-coord, 2. y-coord, 3. lidar pertinence, 4. intensity)
+testingIndex = 6    # ratio of saving to testing folder
+dimIndex = 3    # how many dimensions to keep (in order: 1. x-coord, 2. y-coord, 3. lidar pertinence, 4. intensity)
 
-datasetPath = "../data/results/lanoising-ts5"
-scanField = "scans"
+datasetPath = "../data/results/lanoising"
+scanField = "lanoising"
 outputPath = "./bags/" + datasetPath.split("/")[-1] + "-" + scanField
 os.makedirs(outputPath, exist_ok=True)
 os.makedirs(os.path.join(outputPath, 'training'), exist_ok=True)
@@ -43,8 +43,8 @@ class DataGenerator:
         self.W = 512
         self.resolution = 0.075
 
-        self.length = 4.5
-        self.width = 2.3
+        self.length = 4.85
+        self.width = 2.5
 
         self.tmp_cars = []
 
@@ -65,7 +65,7 @@ class DataGenerator:
                     point = self.data[scanField][i][lidar][j]
                     labels = np.hstack((labels, self.is_car(point, scan_id)))
                     point[2] = 0.3 * scan_id + 0.4
-                    data = np.vstack((data, point[:dimIndex+1]))
+                    data = np.vstack((data, point[:dimIndex]))
 
             # rotate the frame multiple times and save it
             for j in range(rotationIndex):
@@ -80,7 +80,7 @@ class DataGenerator:
                 self.save_id += 1
 
                 # visualize one of rotated frames with corresponding BB for cars
-                '''plt.figure()
+                """plt.figure()
                 plt.scatter(pc_out[labels != -1, 0], pc_out[labels != -1, 1], color='red')
                 plt.scatter(pc_out[labels == -1, 0], pc_out[labels == -1, 1], color='black')
                 for j in range(len(self.tmp_cars)):
@@ -91,14 +91,14 @@ class DataGenerator:
                     py1 = px*math.sin(angle)+py*math.cos(angle)
                     angle1 = self.tmp_cars[j][2] + angle
 
-                    plt.scatter(px1, py1, color='yellow', s=100)
+                    plt.scatter(px1, py1, color='yellow', s=50)
                     corners = self.get_corners_of_rectangle_reentrant(px1, py1, angle1)
                     corners[[2, 3]] = corners[[3, 2]]
                     poly = Polygon(corners, facecolor='none', edgecolor='red')
                     plt.gca().add_patch(poly)
                 plt.gca().set_aspect('equal', adjustable='box')
                 plt.draw()
-                plt.show()'''
+                plt.show()"""
 
         # self.save_h5()
         # self.stack_to_global()
@@ -246,11 +246,11 @@ class DataGenerator:
         grid[2][rows[:], cols[:]] = 1
         grid_labels[rows[lbls != -1], cols[lbls != -1]] = 1
 
-        '''plt.figure()
+        plt.figure()
         plt.imshow(grid.transpose(1, 2, 0))
         plt.imshow(grid_labels)
         plt.show()
-        input()'''
+        input()
 
         self.labels_imgs = np.vstack((self.labels_imgs, [grid_labels]))
         self.data_imgs = np.vstack((self.data_imgs, [grid]))
