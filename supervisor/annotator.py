@@ -20,7 +20,7 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "../data/results/lanoising"
+datasetPath = "../data/results/lanoising/"
 annotationSource = "extrapolated"
 laserPointsFields = ["scans", "lanoising"]
 outputPath = "../annotations/"
@@ -51,7 +51,10 @@ class Annotator(multiprocessing.Process):
 
     def run(self):
         
-        print("Process spawned for file %s" % (self.filename), flush = True)
+        if self.filename in gtBags:
+            print("Process spawned for GT file %s" % (self.filename), flush = True)
+        else:
+            print("Process spawned for file %s" % (self.filename), flush = True)
 
         with open(os.path.join(self.path, self.filename), "rb") as f:
             self.data = pickle.load(f)
@@ -394,10 +397,11 @@ if __name__ == "__main__":
 
     for files in os.walk(gtPath):
         for fn in files[2]:
-            fn = fn.split("-")[:-1]
-            fn = "-".join(fn)
-            fn += ".bag.pickle"
-            gtBags.append(fn)
+            if "-lidar.pkl" in fn:
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag.pickle"
+                gtBags.append(fn)
 
     for scanField in laserPointsFields:
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "imgs"), exist_ok=True)
@@ -413,7 +417,7 @@ if __name__ == "__main__":
             if filename[-7:] == ".pickle":
                 jobs.append(Annotator(files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 8
+    cpuCores = 20
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):

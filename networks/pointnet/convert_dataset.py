@@ -4,7 +4,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 
-datasets_path = Path("/datafast/janota/")
+datasets_path = Path("../bags/")
 
 
 def convert_bag(bag):
@@ -22,6 +22,7 @@ with ThreadPoolExecutor(20) as ex:
     for dataset in datasets_path.glob("*"):
         for bag in dataset.glob("*.h5"):
             fs.append(ex.submit(convert_bag, bag))
+            print(bag)
     for f in fs:
         f.result()
 

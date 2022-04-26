@@ -10,7 +10,6 @@ import numpy as np
 import dataset_car_detector
 from model_pointnet import PointNetDenseCls, feature_transform_regularizer
 
-
 def get_device(gpu=0):  # Manually specify gpu
     if torch.cuda.is_available():
         device = torch.device(gpu)
@@ -18,18 +17,16 @@ def get_device(gpu=0):  # Manually specify gpu
         device = 'cpu'
     return device
 
-
 def get_free_gpu():
+    return 0
     os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
     memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
     index = np.argmax(memory_available[:])
     return int(index)  # Returns index of the gpu with the most memory available
 
-
 def accuracy(prediction, labels_batch, dim=-1):
     pred_index = prediction.argmax(dim)
     return (pred_index == labels_batch).float().mean()
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bs', type=int, default=32, help='input batch size')
@@ -49,11 +46,13 @@ parser.add_argument('--lanoise', action='store_true', help="train on lanoised da
 opt = parser.parse_args()
 
 # init dataset
-data_path = "../../../../datafast/janota/lanoising-ts4-"
+data_path = "../bags/"
 if opt.lanoise:
     data_path += "lanoising"
 else:
     data_path += "scans"
+print("Data path: ", data_path)
+
 trn_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024,
                                                       normalize=opt.normalize, trn=True)
 val_dataset = dataset_car_detector.CarDetectorDataset(num_classes=opt.numc, path=data_path, npoints=1024,
