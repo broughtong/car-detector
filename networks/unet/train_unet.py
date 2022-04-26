@@ -10,7 +10,7 @@ from unet_dataset import UNetCarDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bs', type=int, default=16, help='input batch size')
-parser.add_argument('--nepoch', type=int, default=50, help='number of epochs to train for')
+parser.add_argument('--nepoch', type=int, default=10, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='seg', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
 parser.add_argument('--lr', type=float, default=0.0001, help="dataset path")
@@ -24,7 +24,6 @@ parser.add_argument('--dataset', type=str, help="specify dataset")
 parser.add_argument('--numc', type=int, default=2, help="number of classes")
 parser.add_argument('--lanoise', action='store_true', help="train on lanoised data")
 opt = parser.parse_args()
-
 
 def save_model(model, destination):
     torch.save(model.state_dict(), destination, _use_new_zipfile_serialization=False)
@@ -53,23 +52,24 @@ except OSError:
 log_file = '%s/log.txt' % opt.outf
 f = open(log_file, 'a+')
 f.write("bs: {}, n_epochs: {}, lr: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, lanoise: {}\n".format(opt.bs,
-                                                                                                                 opt.nepoch,
-                                                                                                                 opt.lr,
-                                                                                                                 opt.optim,
-                                                                                                                 opt.momentum,
-                                                                                                                 opt.weight_decay,
-                                                                                                                 opt.weight,
-                                                                                                                 opt.lanoise))
+                             opt.nepoch,
+                             opt.lr,
+                             opt.optim,
+                             opt.momentum,
+                             opt.weight_decay,
+                             opt.weight,
+                             opt.lanoise))
 f.close()
 
 device = get_device(opt.gpu)
 
 # new datasets
-data_path = "/datafast/janota/lanoising-ts4-"
+data_path = "../bags/"
 if opt.lanoise:
     data_path += "lanoising"
 else:
     data_path += "scans"
+print("Dataset Path: ", data_path)
 
 trn_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=True)
 val_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=False)
