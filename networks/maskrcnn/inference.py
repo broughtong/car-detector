@@ -11,9 +11,9 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-modelName = "./models/23-02-22-17_44_34.pth"
-resultsPath = "../../data/results/maskrcnn_raw"
-datasetPath = "../../annotations/maskrcnn/evaluation/imgs"
+modelName = "./models/alpha/scans-25-04-22-18_08_16.pth"
+resultsPath = "../../data/results/maskrcnn_scans_huge"
+datasetPath = "../../annotations/scans/mask/evaluation/imgs"
 
 class Dataset(object):
     def __init__(self, root):
@@ -63,15 +63,21 @@ def main():
         labels = []
         scores = []
         boxes = []
+        centres = []
         for idx in range(len(result[0]["masks"])):
             masks.append(result[0]["masks"][idx][0].detach().cpu().numpy())
-            labels.append(result[0]["labels"][idx].detach().cpu().numpy)
-            scores.append(result[0]["scores"][idx].detach().cpu().numpy)
-            boxes.append(result[0]["boxes"][idx].detach().cpu().numpy)
+            labels.append(result[0]["labels"][idx].detach().cpu().numpy())
+            scores.append(result[0]["scores"][idx].detach().cpu().numpy())
+            boxes.append(result[0]["boxes"][idx].detach().cpu().numpy())
+        for box in boxes:
+            x = (box[0] + box[2])/2
+            y = (box[1] + box[3])/2
+            centres.append([x, y])
         result[0]["masks"] = masks
         result[0]["labels"] = labels
         result[0]["scores"] = scores
         result[0]["boxes"] = boxes
+        result[0]["centres"] = centres
 
         resultfn = os.path.join(resultsPath, modelName.split("/")[-1], imgfn + ".pickle")
         with open(resultfn, "wb") as f:

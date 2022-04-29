@@ -18,10 +18,10 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/results/maskrcnn_raw"
-combinePath = "../data/results/temporal-s"
-outputPath = "../data/results/maskrcnn_raw"
-combinedOutPath = "../data/results/maskrcnn"
+datasetPath = "../data/results/maskrcnn_scans-l"
+combinePath = "../data/results/lanoising"
+outputPath = "../data/results/maskrcnn_scans_reprocessed-l"
+combinedOutPath = "../data/results/maskrcnn_scans_rectified-l"
 #visualisationPath = "../visualisation/"
 
 @contextmanager
@@ -63,6 +63,9 @@ class Converter(multiprocessing.Process):
             score = self.data[0]["scores"][idx]
             mask = self.data[0]["masks"][idx]
 
+            if score < 0.8:
+                continue
+
             x = (float(box[0]) + float(box[2])) / 2
             y = (float(box[1]) + float(box[3])) / 2
 
@@ -94,6 +97,7 @@ class Converter(multiprocessing.Process):
 
 if __name__ == "__main__":
     
+    #extract result from network output into files
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
@@ -101,7 +105,7 @@ if __name__ == "__main__":
                 if ".annotations." not in filename:
                     jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 5
+    cpuCores = 50
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
@@ -117,13 +121,20 @@ if __name__ == "__main__":
             limit += batch
             jobs[i].start()
 
+    for job in jobs:
+        job.join()
+
+    #now we merge those detections into the original file structures
+    #basically bring it into a common format
     combinableFilenames = []
-    for files in os.walk(datasetPath):
+    for files in os.walk(outputPath):
         for filename in files[2]:
             if filename[-12:] == ".annotations":
                 combinableFilenames.append(os.path.join(files[0], filename.split(".")[0]))
     combinableFilenames = list(set(combinableFilenames))
-                    
+
+    print("Combining %i files" % (len(combinableFilenames)))
+
     for base in combinableFilenames:
 
         print("Combining bag", base)
@@ -135,7 +146,8 @@ if __name__ == "__main__":
         for files in os.walk(combinePath):
             for filename in files[2]:
                 if filename.split(".")[0] == base.split("/")[-1]:
-                    combineFile = filename
+                    subPath = files[0][len(combinePath)+1:]
+                    combineFile = os.path.join(subPath, filename)
                     break
 
         if combineFile == "":

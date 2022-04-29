@@ -20,19 +20,17 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "../data/results/lanoising/"
+datasetPath = "../data/results/lanoising-l/"
 annotationSource = "extrapolated"
 laserPointsFields = ["scans", "lanoising"]
-outputPath = "../annotations/"
+outputPath = "../annotations-l/"
 lp = lg.LaserProjection()
-movementThreshold = 5.0
+movementThreshold = 1.0
 gtPath = "../data/gt"
 gtBags = []
 
 #augmentations
-flipH = True
 flipV = True
-rotations = [0, math.pi/2, math.pi, 3*math.pi/2]
 rotations = [0, 1, 2, 3, 4, 5, 6]
 
 @contextmanager
@@ -329,6 +327,10 @@ class Annotator(multiprocessing.Process):
                 combined = utils.combineScans(scan)
 
                 #augmentations
+                rotationsToDo = rotations
+                if self.filename in gtBags:
+                    rotationsToDo = [0]
+
                 for rotation in rotations:
 
                     r = np.identity(4)
@@ -353,22 +355,39 @@ class Annotator(multiprocessing.Process):
                         newAnnotations[i] = [*v, o]
 
                     #raw
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
-                    utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3)
+                    if self.filename not in gtBags:
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=5)
+                        
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
+                        carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
+                        badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
+
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
+
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
+                        self.saveCloud(fn, newScan)
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
+                        self.saveAnnotations(fn, newScan, newAnnotations)
                     
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
-                    carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
-                    badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
+                    elif self.filename in gtBags:
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3)
+                        
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + ".png")
+                        carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
+                        badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
 
-                    fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
-                    utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
 
-                    fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
-                    self.saveCloud(fn, newScan)
-                    fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
-                    self.saveAnnotations(fn, newScan, newAnnotations)
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + ".")
+                        self.saveCloud(fn, newScan)
+                        fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + ".")
+                        self.saveAnnotations(fn, newScan, newAnnotations)
 
-                    if flipV:
+                    if flipV and self.filename not in gtBags:
 
                         fScan = np.copy(newScan)
                         for point in range(len(newScan)):
