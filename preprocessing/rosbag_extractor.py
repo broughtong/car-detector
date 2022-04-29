@@ -45,6 +45,12 @@ class Extractor(multiprocessing.Process):
         self.trans = []
         self.ts = []
 
+        self.gtbag = None
+        for i in gtBags:
+            print(i[1], self.filename)
+            if i[1] == self.filename:
+                self.gtbag = i
+
         self.scanTopics = ["/back_right/sick_safetyscanners/scan", 
                 "/front/sick_safetyscanners/scan",
                 "/back_left/sick_safetyscanners/scan",
@@ -231,7 +237,6 @@ if __name__ == "__main__":
             fn = fn.split("-")[:-1]
             fn = "-".join(fn)
             fn += ".bag"
-            print(files[0], gtPath, files[0][len(gtPath)+1:])
             gtBags.append([gtPath, files[0][len(gtPath)+1:]])
 
     jobs = []
