@@ -4,13 +4,18 @@ Self-learning Car Detector
 Place the rosbags into data/rosbags
 Place the gt into data/gt
 
+# Set-up your system
+You will need to have tf_bag package installed and sourced, from here: `https://github.com/IFL-CAMP/tf_bag`
+For the rest of the dependencies, there are conda environments provided in the conda folder.
+The ros environment is used for everything, except for running lanoising
+You can create the environments like this: `mamba env create --file lanoise.yml`
+
 # Extract the rosbags
 Run preprocessing/rosbag_extractor.py to extract the rosbags
 Run preprocessing/tf_extractor.py to extract the transforms
 
 # Perform simple car detection
 Run supervisor/detector.py to run the method
-To evaluate the results of this only, run evaluation/simple.py
 
 # Prepare Annotations
 Run supervisor/temporal.py to run the temporal filter
