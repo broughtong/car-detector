@@ -20,12 +20,12 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "../data/results/lanoising-l/"
+datasetPath = "../data/results/lanoising/"
 annotationSource = "extrapolated"
 laserPointsFields = ["scans", "lanoising"]
-outputPath = "../annotations-l/"
+outputPath = "../annotations/"
 lp = lg.LaserProjection()
-movementThreshold = 1.0
+movementThreshold = 0.0
 gtPath = "../data/gt"
 gtBags = []
 
@@ -331,7 +331,7 @@ class Annotator(multiprocessing.Process):
                 if self.filename in gtBags:
                     rotationsToDo = [0]
 
-                for rotation in rotations:
+                for rotation in rotationsToDo:
 
                     r = np.identity(4)
                     orientationR = R.from_euler('z', 0)

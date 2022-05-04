@@ -12,7 +12,7 @@ import utils
 import transforms as T
 
 modelName = "./models/alpha/scans-25-04-22-18_08_16.pth"
-resultsPath = "../../data/results/maskrcnn_scans_huge"
+resultsPath = "../../data/results/maskrcnn_scans_rot_fix"
 datasetPath = "../../annotations/scans/mask/evaluation/imgs"
 
 class Dataset(object):

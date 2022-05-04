@@ -47,15 +47,18 @@ class Extractor(multiprocessing.Process):
 
         self.gtbag = None
         for i in gtBags:
-            print(i[1], self.filename)
-            if i[1] == self.filename:
+            if i[2] == self.filename:
                 self.gtbag = i
+        if self.gtbag:
+            with open(os.path.join(*self.gtbag[:2], self.gtbag[3]), "rb") as f:
+                self.gtbag = pickle.load(f, encoding="latin1")
 
         self.scanTopics = ["/back_right/sick_safetyscanners/scan", 
                 "/front/sick_safetyscanners/scan",
                 "/back_left/sick_safetyscanners/scan",
                 "/back_middle/scan"]
         self.synchroniseToTopic = self.scanTopics[-1] #MUST always be last from list (back middle higher fps)
+        self.topicInGT = 1
         self.topicBuf = []
         for _ in range(len(self.scanTopics)-1):
             self.topicBuf.append(None)
@@ -204,10 +207,18 @@ class Extractor(multiprocessing.Process):
         msgs = copy.deepcopy(self.topicBuf)
         msgs.append(msg)
 
-        #if not self.odometryMoved() and self.filename not in self.gtBags:
-        #    return
-        if not self.odometryMoved():# and self.filename not in self.gtBags:
-            return
+        if self.gtbag is None:
+            if not self.odometryMoved():# and self.filename not in self.gtBags:
+                return
+        else:
+            tFound = False
+            for frame in self.gtbag[self.topicInGT]:
+                gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
+                if gttime == t:
+                    tFound = True
+                    break
+            if tFound == False:
+                return
         #print("Robot moved!", flush=True)
 
         combined, trans, ts = self.combineScans(msgs, t)
@@ -223,21 +234,15 @@ class Extractor(multiprocessing.Process):
 
 if __name__ == "__main__":
 
-    #rosbagList = []
-    #with open("./rosbagList") as f:
-    #    rosbagList = f.read()
-    #rosbagList = rosbagList.split("\n")
-    #rosbagList = list(filter(None, rosbagList))
-    #rosbagList = [x.split(" ")[0] + ".bag" for x in rosbagList]
-    #print(rosbagList)
-
     gtBags = []
     for files in os.walk(gtPath):
         for fn in files[2]:
-            fn = fn.split("-")[:-1]
-            fn = "-".join(fn)
-            fn += ".bag"
-            gtBags.append([gtPath, files[0][len(gtPath)+1:]])
+            if "-lidar.pkl" in fn:
+                origFn = fn
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag"
+                gtBags.append([gtPath, files[0][len(gtPath)+1:], fn, origFn])
 
     jobs = []
     for files in os.walk(datasetPath):
@@ -246,9 +251,7 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 #if filename in rosbagList:
-                break
                 jobs.append(Extractor(path, folder, filename, gtBags))
-    #jobs = jobs[:1]
     maxCores = 10
     limit = maxCores
     batch = maxCores 

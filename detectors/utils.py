@@ -162,17 +162,16 @@ class Visualise(multiprocessing.Process):
 
     def drawFrame(self, idx):
 
-        scans = self.data["scans"][idx]
+        scans = self.data["lanoising"][idx]
         #scans = combineScans([scans["sick_back_left"], scans["sick_back_right"], scans["sick_back_middle"], scans["sick_front"]])
-        scans = combineScans(self.data["scans"][idx])
 
         fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
-        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], [], 3, False)
+        drawImgFromPoints(fn, scans, [], [], self.data["extrapolated"][idx], [], 3, False)
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/results/detector-s/roura"
-    outPath = "../visualisation/xx"
+    datasetPath = "../data/results/lanoising"
+    outPath = "../visualisation/lanoising"
     os.makedirs(outPath, exist_ok=True)
 
     jobs = []

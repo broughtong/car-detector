@@ -12,11 +12,12 @@ import sys
 detectionGraphLimit = 5.0
 confusionGraphLimit = 20.0
 graph_resolution = 250
-detectionThreshold = 0.5
+detectionThreshold = 3
 
-evalName = "all"
+evalName = "full-complete"
 datasetPaths = {"../data/results/detector-s": "annotations"}
 datasetPaths["../data/results/temporal-new-0.8-50-6-75-6"] = "extrapolated"
+datasetPaths["../data/results/maskrcnn_scans_rectified-debug/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-l"] = "maskrcnn"
 #for i in range(1200, 2000, 100):
 #    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
@@ -109,8 +110,13 @@ def evaluateFile(filename, method, filePart):
         fn_range[method][val] = 0
         fp_range[method][val] = 0
 
-    frameCounter = 1
+    frameCounter = 0
     for frame in gtdata[1]: #back middle sensor, higher framerate
+        frameCounter += 1
+
+        if frameCounter != 120:
+            continue
+        print("ninin")
 
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
         if gttime not in data["ts"]:
@@ -144,6 +150,8 @@ def evaluateFile(filename, method, filePart):
         gts = copy.deepcopy(frameAnnotations)[1:]
 
         for rng in tp_range[method].keys():
+            pass
+        for rng in [20]:
             
             for gt in gts:
                 dist = (gt[0]**2 + gt[1]**2)**0.5
@@ -154,6 +162,14 @@ def evaluateFile(filename, method, filePart):
                     dx = gt[0] - j[0]
                     dy = gt[1] - j[1]
                     diff = ((dx**2) + (dy**2))**0.5
+                    if "scans" in method:
+                        print("===")
+                        #print(filename)
+                        print(frameCounter - 1)
+                        #print(method)
+                        print(gt)
+                        print(j)
+                        print(diff)
                     if diff < detectionThreshold:
                         found = True
                 if found == True:
@@ -235,7 +251,6 @@ def evaluateFile(filename, method, filePart):
         
         cols = [[255, 128, 128]] * len(frameAnnotations)
         pointsToImgsDraw(filename, frameCounter, dataFrame, frameAnnotations[1:], cols)
-        frameCounter += 1
 
     #recall distance
     for val in np.linspace(0.0, confusionGraphLimit, num=graph_resolution):
@@ -421,11 +436,12 @@ if __name__ == "__main__":
     for method in datasetPaths:
         print("Evaluation method %s" % (method))
         for files in os.walk(method):
-            for filename in files[2]:
-                if filename[-7:] == ".pickle":
-                    filePart = datasetPaths[method]
-                    evaluateFile(filename, method, filePart)
-                    break
+            #if files[0] is not method:
+                for filename in files[2]:
+                    if "17-13-47-41" in filename:
+                        if filename[-7:] == ".pickle":
+                            filePart = datasetPaths[method]
+                            evaluateFile(filename, method, filePart)
     print("Generating Graphs")
     drawGraphs()
 
