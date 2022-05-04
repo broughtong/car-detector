@@ -21,6 +21,7 @@ datasetPath = "../data/results/lanoising/"
 scanFields = ["scans", "lanoising"]
 gtPath = "../data/gt"
 
+
 class DataGenerator(multiprocessing.Process):
     def __init__(self, path, folder, filename, target_path, scanField, version="extrapolated"):
         multiprocessing.Process.__init__(self)
@@ -52,7 +53,10 @@ class DataGenerator(multiprocessing.Process):
     def run(self):
         print("Processing to target {}".format(self.target_path))
         n = len(self.data[self.scanField])
-        scans = ["sick_back_right", "sick_back_left", "sick_back_middle", "sick_front"]
+
+        scans = list(self.data[self.scanField][0].keys())
+        # FIXME: add all possible topics to the dictionary
+        scans_z_coords = {"sick_back_right": 0, "sick_back_left": 0, "sick_back_middle": 1, "sick_front": 0.5}
 
         for i in range(n):
             if i % 1000 == 0 and i != 0:
@@ -65,7 +69,7 @@ class DataGenerator(multiprocessing.Process):
                 for j in range(len(self.data[self.scanField][i][lidar])):
                     point = self.data[self.scanField][i][lidar][j]
                     labels = np.hstack((labels, self.is_car(point, scan_id)))
-                    point[2] = 0.3 * scan_id + 0.4
+                    point[2] = scans_z_coords[lidar]
                     data = np.vstack((data, point[:dimIndex]))
 
             # rotate the frame multiple times and save it
@@ -225,13 +229,15 @@ if __name__ == "__main__":
             else:
                 bags.append([path, folder, filename])
 
+    print(bags)
+
     jobs = []
     for scanField in scanFields:
         outputPath = "./bags/" + scanField
 
         for i in range(len(bags)):
             if i % testingIndex == 0:
-                target_dir = os.path.join(outputPath, 'testing', bags[i][2][:-11]) 
+                target_dir = os.path.join(outputPath, 'testing', bags[i][2][:-11])
             else:
                 target_dir = os.path.join(outputPath, 'training', bags[i][2][:-11])
             os.makedirs(target_dir, exist_ok=True)
