@@ -19,19 +19,30 @@ Run supervisor/detector.py to run the method
 
 # Prepare Annotations
 Run supervisor/temporal.py to run the temporal filter
-If you wish to analyse the results of the temporal filter, run evaluation/temporal.py
 
 You will need the weather simulator network models, explained on the simulator page.
 The origal page is here https://github.com/cavayangtao/lanoising
 And a mirror is provided here: https://github.com/broughtong/lanoising
 Copy the models into supervisor/lanoising/models/
 
+Switch to the lanoise conda environment.
+For me, I need to make sure PYTHONPATH is blank, activate the conda environment, and then source ros, in that order.
 Run the lanoising weather simulator in supervisor/lanoising/lanoising.py
-I dumped the conda environment into the env.yaml file
-You can load it with mamba env create -f env.yaml
 
-Run supervisor/annotator_mask.py to create annotations.
+Run supervisor/annotator.py to create annotations.
 Run supervisor/datasetDivision.py to break the images into training/testing/evaluation subset by rosbag (all bags with gt go to eval)
+
+Run networks/generate_data.py
+Train pointnet using python train_segmentation.py and python train_segmentation.py --lanoise
+Optionally add the feature transform flag --feature_transform
+Train unet using python trian_unet.py
+Optional flags --num_channels 3 (1/2/3) --lanoise and --numc 2 (2/3)
+
+
+## Evaluation 
+
+For pointnet use networkEval.py
+Make sure the feature transform flag is set correctly.
 
 # Train the networks
 The MaskRCNN network can be trained by running networks/maskrcnn/training.py

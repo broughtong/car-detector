@@ -22,7 +22,7 @@ from tensorflow.python.keras.backend import set_session
 
 lp = lg.LaserProjection()
 
-datasetPath = "../../data/results/temporal-new-0.8-50-6-75-6/"
+datasetPath = "../../data/results/temporal-new-0.8-50-5-50-10/"
 outputPath = "../../data/results/lanoising"
 
 # functions for MDN

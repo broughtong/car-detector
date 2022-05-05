@@ -470,7 +470,7 @@ if __name__ == "__main__":
                 #for i in range(0, 1000, 100):
                 path = datasetPath
                 folder = files[0][len(path):]
-                jobs.append(Temporal(path, folder, filename, 0.8, 50, 6, 75, 6))
+                jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 50, 10))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
     #jobs = [jobs[0]]
@@ -479,7 +479,7 @@ if __name__ == "__main__":
     #    jobs.append(Interpolator("../data/results/detector-s/", "2020-11-17-13-47-41.bag.pickle", i, 0.4, 0))
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 9
+    cpuCores = 48
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
