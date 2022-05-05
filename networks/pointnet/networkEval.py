@@ -15,7 +15,7 @@ import random
 from model_pointnet import PointNetDenseCls
 import copy
 
-datasetPath = "../../data/extracted"
+datasetPath = "../../data/results/lanoise"
 outputPath = "../../data/results/pn-eval"
 os.makedirs(outputPath, exist_ok=True)
 
@@ -87,7 +87,8 @@ class Inference(multiprocessing.Process):
         self.device = get_device(gpu=gpu)
 
     def load_model(self, model_path):
-        model = PointNetDenseCls(k=2, feature_transform=True)
+        model = PointNetDenseCls(k=2, feature_transform=False)
+        print(model_path)
         model.load_state_dict(torch.load(model_path))
         return model
 
@@ -367,25 +368,25 @@ class Inference(multiprocessing.Process):
 
 if __name__ == "__main__":
 
-    model_path = "sund_1/epoch_1.pth"
+    model_path = "models/epoch_0.pth"
 
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
-            if filename[-7:] == ".pickle" and "2020-11-11-16-03-33" in filename:
-                evaluator = Inference(files[0], filename, model_path)
-                evaluator.run()
-
-                # jobs.append(Inference(files[0], filename, model_path))
-    # print("Spawned %i processes" % (len(jobs)), flush=True)
-    # cpuCores = 1
-    # limit = cpuCores
-    # batch = cpuCores
-    # for i in range(len(jobs)):
-    #     if i < limit:
-    #         jobs[i].run()
-    #     else:
-    #         for j in range(limit):
-    #             jobs[j].join()
-    #         limit += batch
-    #         jobs[i].start()
+            if filename[-7:] == ".pickle":# and "2020-11-11-16-03-33" in filename:
+                jobs.append(Inference(files[0], filename, model_path))
+    print("Spawned %i processes" % (len(jobs)), flush=True)
+    cpuCores = 1
+    limit = cpuCores
+    batch = cpuCores
+    for i in range(len(jobs)):
+        if i < limit:
+            jobs[i].run()
+        else:
+            for j in range(limit):
+                try:
+                    jobs[j].join()
+                except:
+                    pass
+            limit += batch
+            jobs[i].start()

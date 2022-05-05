@@ -21,7 +21,6 @@ datasetPath = "../data/results/lanoising/"
 scanFields = ["scans", "lanoising"]
 gtPath = "../data/gt"
 
-
 class DataGenerator(multiprocessing.Process):
     def __init__(self, path, folder, filename, target_path, scanField, version="extrapolated"):
         multiprocessing.Process.__init__(self)

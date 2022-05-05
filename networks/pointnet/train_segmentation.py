@@ -30,8 +30,8 @@ def accuracy(prediction, labels_batch, dim=-1):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bs', type=int, default=32, help='input batch size')
-parser.add_argument('--nepoch', type=int, default=50, help='number of epochs to train for')
-parser.add_argument('--outf', type=str, default='seg', help='output folder')
+parser.add_argument('--nepoch', type=int, default=10, help='number of epochs to train for')
+parser.add_argument('--outf', type=str, default='models', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
 parser.add_argument('--lr', type=float, default=0.001, help="dataset path")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
