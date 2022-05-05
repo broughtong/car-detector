@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import utils
 import matplotlib.pyplot as plt
 import math
 import copy
@@ -14,8 +15,10 @@ confusionGraphLimit = 20.0
 graph_resolution = 250
 detectionThreshold = 1.0
 
-evalName = "eval"
+evalName = "eval23"
 datasetPaths = {"../data/results/detector-s": "annotations"}
+#datasetPaths["../data/results/temporal-new-0.8-50-6-105-12"] = "extrapolated"
+#datasetPaths["../data/results/"] = "extrapolated"
 #datasetPaths["../data/results/temporal-new-0.8-50-6-75-6"] = "extrapolated"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-debug/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-l"] = "maskrcnn"
@@ -23,7 +26,7 @@ datasetPaths = {"../data/results/detector-s": "annotations"}
 #    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
 visualisationPath = "../visualisation/eval-" + evalName
 tfPath = "../data/static_tfs"
-gtPath = "../data/gt/plain"
+gtPath = "../data/gt/weather-max"
 
 resultsPath = os.path.join("./results/", evalName)
 
@@ -130,15 +133,17 @@ def evaluateFile(filename, method, filePart):
         frameAnnotations = []
         frameAnnotations.append(frame[0])
         for i in range(1, len(frame)):
-            rotation = frame[i][2] % math.pi
+            rotation = frame[i][2]
             position = [*frame[i][:2], 0, 1]
             mat = tfdata["sick_back_middle"]["mat"]
             position = np.matmul(mat, position)
-            rotation = np.array([math.cos(rotation), math.sin(rotation), 0, 1])
-            rotation = np.dot(mat, rotation)
-            rotation = math.atan2(rotation[1], rotation[0])
-            rotation = rotation % math.pi
-            car = [*position[:2], rotation]
+            quat = tfdata["sick_back_middle"]["quaternion"]
+            qx = quat[0]
+            qy = quat[1]
+            qz = quat[2]
+            qw = quat[3]
+            yaw = math.atan2(2.0*(qy*qz + qw*qx), qw*qw - qx*qx - qy*qy + qz*qz)
+            car = [*position[:2], yaw-rotation]
             frameAnnotations.append(car)
 
         #confusion matrix
@@ -243,7 +248,8 @@ def evaluateFile(filename, method, filePart):
                     det_gt_hit[method][key] += 1
         
         cols = [[255, 128, 128]] * len(frameAnnotations)
-        pointsToImgsDraw(filename, frameCounter, dataFrame, frameAnnotations[1:], cols)
+        meth = method.split("/")[-1]
+        utils.drawImgFromPoints("../visualisation/compmax/" + filename + "-" + str(meth) + "-" + str(frameCounter) + ".png", dataFrame, [], [], gts, detections, 3)
 
     #recall distance
     for val in np.linspace(0.0, confusionGraphLimit, num=graph_resolution):
@@ -356,74 +362,7 @@ def makeGraph(hists, total, label, xlabel, ylabel, filename):
     plt.ylim([-0.02, 1.02])
     fig.savefig(filename)
     plt.close('all')
-
-def pointsToImgsDraw(filename, frameCounter, points, wheels, colours):
-
-    res = 1024
-    scale = 25
-    accum = np.zeros((res, res, 3))
-    accum.fill(255)
-
-    for point in points:
-        x, y = point[:2]
-        x *= scale
-        y *= scale
-        x = int(x)
-        y = int(y)
-        try:
-            accum[x+int(res/2), y+int(res/2)] = [0, 0, 0]
-        except:
-            pass
-
-    for wheel in range(len(wheels)):
-        x, y = wheels[wheel][:2]
-        x *= scale
-        y *= scale
-        x = int(x)
-        y = int(y)
-
-        try:
-            accum[x+int(res/2), y+int(res/2)] = colours[wheel]
-        except:
-            pass
-
-        try:
-            accum[x+int(res/2)+1, y+int(res/2)+1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2)+1, y+int(res/2)-1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2)-1, y+int(res/2)+1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2)-1, y+int(res/2)-1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2)-1, y+int(res/2)] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2), y+int(res/2)-1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2), y+int(res/2)+1] = colours[wheel]
-        except:
-            pass
-        try:
-            accum[x+int(res/2)+1, y+int(res/2)] = colours[wheel]
-        except:
-            pass
-    fn = os.path.join(visualisationPath)
-    os.makedirs(fn, exist_ok=True)
-    fn = os.path.join(fn, filename + "-" + str(frameCounter) + ".png")
-    cv2.imwrite(fn, accum)
-
+    
 if __name__ == "__main__":
 
     for method in datasetPaths:
