@@ -25,7 +25,7 @@ DIAGONAL = 3.1
 DIVISION_FACTOR = 5
 THRESHOLD = 0.3
 
-lidar_dict = {'sick_back_left':0, 'sick_back_right':1, 'sick_front':2, 'sick_back_middle':3}
+scans_z_coords = {"sick_back_right": 0.2, "sick_back_left": 0.2, "sick_back_middle": 1, "sick_front": 0.6}
 
 
 def euclidean_distance(x_1, x_2, y_1, y_2):
@@ -35,6 +35,10 @@ def euclidean_distance(x_1, x_2, y_1, y_2):
 def pc_normalize(pc, center):
     pc[:, 0:2] = pc[:, 0:2] - center
     pc[:, 0:2] = (pc[:, 0:2] + 40) / 80
+
+    if pc.shape[1] > 2:
+        pc[:, 2] /= np.max(pc[:, 2])
+
     return pc
     
 
@@ -78,16 +82,19 @@ def suppress_stdout_stderr():
 
 
 class Inference(multiprocessing.Process):
-    def __init__(self, path, filename, model_path, num_classes=2, gpu=0):
+    def __init__(self, path, filename, model_path, num_classes=2, gpu=0, num_dimensions=2, normalize=True, feat_tf=True):
         multiprocessing.Process.__init__(self)
 
         self.filename = filename
         self.path = path
         self.num_classes = num_classes
         self.device = get_device(gpu=gpu)
+        self.num_dimensions = num_dimensions
+        self.normalize = normalize
+        self.feat_tf = feat_tf
 
     def load_model(self, model_path):
-        model = PointNetDenseCls(k=2, feature_transform=False)
+        model = PointNetDenseCls(k=self.num_classes, feature_transform=self.feat_tf, num_dimensions=self.num_dimensions)
         print(model_path)
         model.load_state_dict(torch.load(model_path))
         return model
@@ -113,13 +120,15 @@ class Inference(multiprocessing.Process):
             frame = np.empty((0, 3))
             for j in range(len(keys)):
                 scan = np.array(self.data["scans"][i][keys[j]])
-                scan = scan[:, :3]
-                scan[:, 2] = lidar_dict[keys[j]] 
+                scan[:, 2] = scans_z_coords[keys[j]]
                 frame = np.vstack((frame, scan))
+
             frame, center = prepare_pc(frame, 1024)
+            frame[:, [2, 3]] = frame[:, [3, 2]]
+            frame = frame[:, :self.num_dimensions]
             frame_old = copy.deepcopy(frame)
-            frame = pc_normalize(frame, center)
-            frame = frame[:, :2]
+            if self.normalize:
+                frame = pc_normalize(frame, center)
             frame = np.expand_dims(frame, 0)
             frame = np.transpose(frame, (0, 2, 1)).astype(dtype=np.float32)
 
@@ -128,7 +137,7 @@ class Inference(multiprocessing.Process):
                 output, _, _ = self.model(torch.from_numpy(frame).to(self.device))
                 output = output.view(-1, self.num_classes)
                 output = torch.argmax(output, dim=1).cpu()
-                frame = np.transpose(np.squeeze(frame), (1, 0))
+                # frame = np.transpose(np.squeeze(frame), (1, 0))
                 frame_old = frame_old[output == 1]
 
             self.extract_wheels(frame_old, min_wheels=3, use_bumper=False, min_samples=2, splitting=True)
@@ -159,7 +168,7 @@ class Inference(multiprocessing.Process):
         if points.shape[0] < min_samples or points.ndim < 2:
             # print("Lack of detections")
             return
-        idxs = points[:, 2] == lidar_dict['sick_back_middle']
+        idxs = points[:, 2] == scans_z_coords['sick_back_middle']
         if np.nonzero(np.logical_not(idxs))[0].shape[0] < 2:
             # print("Lack of detections")
             return
@@ -369,12 +378,13 @@ class Inference(multiprocessing.Process):
 if __name__ == "__main__":
 
     model_path = "models/epoch_0.pth"
+    num_dimensions = 2
 
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":# and "2020-11-11-16-03-33" in filename:
-                jobs.append(Inference(files[0], filename, model_path))
+                jobs.append(Inference(files[0], filename, model_path, num_classes=num_dimensions))
     print("Spawned %i processes" % (len(jobs)), flush=True)
     cpuCores = 1
     limit = cpuCores
