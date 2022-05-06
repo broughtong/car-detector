@@ -55,7 +55,7 @@ class DataGenerator(multiprocessing.Process):
 
         scans = list(self.data[self.scanField][0].keys())
         # FIXME: add all possible topics to the dictionary
-        scans_z_coords = {"sick_back_right": 0, "sick_back_left": 0, "sick_back_middle": 1, "sick_front": 0.5}
+        scans_z_coords = {"sick_back_right": 0.2, "sick_back_left": 0.2, "sick_back_middle": 1, "sick_front": 0.6}
 
         for i in range(n):
             if i % 1000 == 0 and i != 0:
