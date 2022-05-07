@@ -83,10 +83,6 @@ class Converter(multiprocessing.Process):
             ev = v[bigIdx]
             rot = math.atan2(ev[1], ev[0])
 
-            #cv2.imwrite("et.png", mask)
-            #import sys
-            #sys.exit(0)
-
             scale = 1024
             annotation = [x/scale, y/scale, rot]
             annotations.append(annotation)

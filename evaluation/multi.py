@@ -13,6 +13,7 @@ detectionGraphLimit = 5.0
 confusionGraphLimit = 20.0
 graph_resolution = 250
 detectionThreshold = 0.5
+closestOnly = True
 
 evalName = "test-temporal-tunen2"
 datasetPaths = {"../data/results/detector-s": "annotations"}
@@ -117,6 +118,8 @@ def evaluateFile(filename, method, filePart):
 
         frameAnnotations = []
         frameAnnotations.append(frame[0])
+        closestCar = None
+
         for i in range(1, len(frame)):
             rotation = frame[i][2] % math.pi
             position = [*frame[i][:2], 0, 1]
@@ -127,7 +130,19 @@ def evaluateFile(filename, method, filePart):
             rotation = math.atan2(rotation[1], rotation[0])
             rotation = rotation % math.pi
             car = [*position[:2], rotation]
-            frameAnnotations.append(car)
+            if not closestOnly:
+                frameAnnotations.append(car)
+            else:
+                if closestCar == None:
+                    closestCar = car
+                else:
+                    distOld = (closestCar[0]**2) + (closestCar[1]**2)) ** 0.5
+                    distNew = (car[0]**2) + (car[1]**2)) ** 0.5
+                    if distNew < distOld:
+                        closestCar = car
+
+        if closestOnly and closestCar is not None:
+            frameAnnotations = [closestCar]
 
         #confusion matrix
         detections = copy.deepcopy(data[filePart][dataFrameIdx])
