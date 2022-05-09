@@ -6,6 +6,7 @@ import math
 import numpy as np
 import copy
 import multiprocessing
+import random
 
 def combineScans(arrOfScans):
 
@@ -17,7 +18,7 @@ def combineScans(arrOfScans):
 
     return np.concatenate(scans)
 
-def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
+def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False, saltPepperProb=None):
 
     #filename
     #scan points
@@ -103,6 +104,16 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         except:
             pass
 
+    if saltPepperProb:
+        def randomisePixel(existing):
+            r = random.random()
+            if r < saltPepperProb:
+                return 1
+            return existing
+
+        randomFunction = np.vectorize(randomisePixel)
+        img = randomFunction(img)
+
     if dilation is not None:
         kernel = np.ones((dilation, dilation), 'uint8')
         img = cv2.erode(img, kernel, iterations=1)
@@ -138,6 +149,8 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
     if renderAnnotations:
         cv2.putText(img, "%s cars" % (str(len(cars))), (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 3, 50)
 
+    path = os.path.dirname(filename)
+    os.makedirs(path, exist_ok=True)
     cv2.imwrite(filename, img)
 
 def getInAnnotation(scan, annotations):
@@ -262,11 +275,12 @@ class Visualise(multiprocessing.Process):
         scans = combineScans(self.data["scans"][idx])
 
         fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
-        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], [], 3, False)
+        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], self.data["extrapolated"][idx], 3, False, saltPepperProb=0.001)
 
 if __name__ == "__main__":
 
     datasetPath = "../data/results/temporal-new-0.8-50-6-75-12"
+    datasetPath = "../../external/broughtong/maskrcnn_scans_rectified/scans-06-05-22-20_22_40.pth"
     outPath = "../visualisation/temporal"
     os.makedirs(outPath, exist_ok=True)
 
@@ -275,7 +289,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Visualise(datasetPath, outPath, files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 16
+    maxCores = 1
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):

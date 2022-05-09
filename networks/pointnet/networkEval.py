@@ -15,8 +15,8 @@ import random
 from model_pointnet import PointNetDenseCls
 import copy
 
-datasetPath = "../../data/results/lanoise"
-outputPath = "../../data/results/pn-eval"
+datasetPath = "../../data/results/lanoising/weather-max"
+outputPath = "../../data/results/pns-eval-4"
 os.makedirs(outputPath, exist_ok=True)
 
 WIDTH = 1.5
@@ -81,9 +81,9 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 
-class Inference(multiprocessing.Process):
-    def __init__(self, path, filename, model_path, num_classes=2, gpu=0, num_dimensions=2, normalize=True, feat_tf=True):
-        multiprocessing.Process.__init__(self)
+class Inference():
+    def __init__(self, path, filename, model_path, num_classes=2, gpu=0, num_dimensions=4, normalize=True, feat_tf=True):
+        #multiprocessing.Process.__init__(self)
 
         self.filename = filename
         self.path = path
@@ -117,7 +117,7 @@ class Inference(multiprocessing.Process):
         self.data["pointnet"] = []
 
         for i in range(len(self.data["scans"])):
-            frame = np.empty((0, 3))
+            frame = np.empty((0, 4))
             for j in range(len(keys)):
                 scan = np.array(self.data["scans"][i][keys[j]])
                 scan[:, 2] = scans_z_coords[keys[j]]
@@ -168,7 +168,7 @@ class Inference(multiprocessing.Process):
         if points.shape[0] < min_samples or points.ndim < 2:
             # print("Lack of detections")
             return
-        idxs = points[:, 2] == scans_z_coords['sick_back_middle']
+        idxs = points[:, 3] == scans_z_coords['sick_back_middle']
         if np.nonzero(np.logical_not(idxs))[0].shape[0] < 2:
             # print("Lack of detections")
             return
@@ -377,7 +377,7 @@ class Inference(multiprocessing.Process):
 
 if __name__ == "__main__":
 
-    model_path = "models/epoch_0.pth"
+    model_path = "models/epoch_6.pth"
     num_dimensions = 2
 
     jobs = []
@@ -399,4 +399,4 @@ if __name__ == "__main__":
                 except:
                     pass
             limit += batch
-            jobs[i].start()
+            jobs[i].run()

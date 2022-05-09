@@ -19,8 +19,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 datasetPath = "../data/results/detector-s/"
-outputPath = "../data/results/temporal-new-"
-visualisationPath = "../visualisation/temporal-prc-"
+outputPath = "../data/results/temporal-"
+visualisationPath = "../visualisation/temporal-"
 
 @contextmanager
 def suppress_stdout_stderr():

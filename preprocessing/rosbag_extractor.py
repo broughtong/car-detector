@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import time
 import copy
 import rospy
 import pickle
@@ -66,6 +67,7 @@ class Extractor(multiprocessing.Process):
     def run(self):
         
         print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush = True)
+        time.sleep(2)
 
         print("Reading tfs", flush = True)
         try:
@@ -207,18 +209,19 @@ class Extractor(multiprocessing.Process):
         msgs = copy.deepcopy(self.topicBuf)
         msgs.append(msg)
 
-        if self.gtbag is None:
-            if not self.odometryMoved():# and self.filename not in self.gtBags:
-                return
-        else:
-            tFound = False
-            for frame in self.gtbag[self.topicInGT]:
-                gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
-                if gttime == t:
-                    tFound = True
-                    break
-            if tFound == False:
-                return
+        if "2022-02-15-15-08-59.bag" not in self.filename: #moving
+            if self.gtbag is None:
+                if not self.odometryMoved():# and self.filename not in self.gtBags:
+                    return
+            else:
+                tFound = False
+                for frame in self.gtbag[self.topicInGT]:
+                    gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
+                    if gttime == t:
+                        tFound = True
+                        break
+                if tFound == False:
+                    return
         #print("Robot moved!", flush=True)
 
         combined, trans, ts = self.combineScans(msgs, t)
@@ -250,9 +253,8 @@ if __name__ == "__main__":
             if filename[-4:] == ".bag":
                 path = datasetPath
                 folder = files[0][len(path):]
-                #if filename in rosbagList:
                 jobs.append(Extractor(path, folder, filename, gtBags))
-    maxCores = 10
+    maxCores = 32
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)
