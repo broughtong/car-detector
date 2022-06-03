@@ -48,4 +48,6 @@ Alternatively, you can run the files in network/ to train the other networks.
 
 For pointnet use networkEval.py
 Make sure the feature transform flag is set correctly.
+For each network, go into the folder and run the associated evaluation script.
+To generate the graphs, run the scripts in the evaluation folder.
 
