@@ -1,0 +1,6 @@
+data/
+*.swp
+*.swo
+visualisation/
+*.pyc
+__pycache__/
