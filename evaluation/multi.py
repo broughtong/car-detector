@@ -12,12 +12,12 @@ import sys
 detectionGraphLimit = 5.0
 confusionGraphLimit = 20.0
 graph_resolution = 250
-detectionThreshold = 3
+detectionThreshold = 1.0
 
-evalName = "full-complete"
+evalName = "full-train-5"
 datasetPaths = {"../data/results/detector-s": "annotations"}
 datasetPaths["../data/results/temporal-new-0.8-50-6-75-6"] = "extrapolated"
-datasetPaths["../data/results/maskrcnn_scans_rectified-debug/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
+datasetPaths["../data/results/maskrcnn_scans_rectified-xy/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-l"] = "maskrcnn"
 #for i in range(1200, 2000, 100):
 #    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
@@ -114,10 +114,6 @@ def evaluateFile(filename, method, filePart):
     for frame in gtdata[1]: #back middle sensor, higher framerate
         frameCounter += 1
 
-        if frameCounter != 120:
-            continue
-        print("ninin")
-
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
         if gttime not in data["ts"]:
             print("Warning, no data for gt!")
@@ -150,9 +146,6 @@ def evaluateFile(filename, method, filePart):
         gts = copy.deepcopy(frameAnnotations)[1:]
 
         for rng in tp_range[method].keys():
-            pass
-        for rng in [20]:
-            
             for gt in gts:
                 dist = (gt[0]**2 + gt[1]**2)**0.5
                 if dist > rng:
@@ -162,14 +155,6 @@ def evaluateFile(filename, method, filePart):
                     dx = gt[0] - j[0]
                     dy = gt[1] - j[1]
                     diff = ((dx**2) + (dy**2))**0.5
-                    if "scans" in method:
-                        print("===")
-                        #print(filename)
-                        print(frameCounter - 1)
-                        #print(method)
-                        print(gt)
-                        print(j)
-                        print(diff)
                     if diff < detectionThreshold:
                         found = True
                 if found == True:
@@ -276,7 +261,6 @@ def drawGraphs():
     filteredPrecision = {}
 
     for method in datasetPaths:
-        print(method, lastVal, flush=True)
         tp = tp_range[method][lastVal]
         fn = fn_range[method][lastVal]
         fp = fp_range[method][lastVal]
@@ -322,6 +306,7 @@ def drawGraphs():
         except:
             print("Precision/Recall = %s %s" % (precision, recall))
             
+    print(gt_det_hit.keys(), "ononO")
 
     makeGraph(gt_det_hit, gt_det_total, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "gtdet" + ".png"))
     makeGraph(det_gt_hit, det_gt_total, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "detgt" + ".png"))

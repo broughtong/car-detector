@@ -18,10 +18,10 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/results/maskrcnn_scans_huge"
+datasetPath = "../data/results/maskrcnn_scans_rot_fix/scans-25-04-22-18_08_16.pth"
 combinePath = "../data/results/lanoising"
-outputPath = "../data/results/maskrcnn_scans_reprocessed-debug"
-combinedOutPath = "../data/results/maskrcnn_scans_rectified-debug"
+outputPath = "../data/results/maskrcnn_scans_reprocessed-xy"
+combinedOutPath = "../data/results/maskrcnn_scans_rectified-xy"
 #visualisationPath = "../visualisation/"
 
 @contextmanager
@@ -41,7 +41,7 @@ class Converter(multiprocessing.Process):
 
         print("Process spawned for file %s" % (self.filename), flush = True)
 
-        with open(os.path.join(datasetPath, self.path, self.filename), "rb") as f:
+        with open(os.path.join(datasetPath, self.filename), "rb") as f:
             self.data = pickle.load(f)
         #combinefn = os.path.join(combinePath, self.filename.split(".pickle")[0]+".pickle")
         #with open(combinefn, "rb") as f:
@@ -63,17 +63,19 @@ class Converter(multiprocessing.Process):
             score = self.data[0]["scores"][idx]
             mask = self.data[0]["masks"][idx]
 
-            if score < 0.8:
+            if score < 0.9:
                 continue
 
             x = (float(box[0]) + float(box[2])) / 2
             y = (float(box[1]) + float(box[3])) / 2
-            print(x, y)
             res = 1024
             scale = 25
             x = (x - (res/2)) / scale
             y = (y - (res/2)) / scale
-            print(x, y)
+
+            buf = x
+            x = y
+            y = buf
 
             mask = mask[math.floor(box[1]):math.ceil(box[3]), math.floor(box[0]):math.ceil(box[2])]
 
@@ -90,7 +92,7 @@ class Converter(multiprocessing.Process):
             if w[1] > w[0]:
                 bigIdx = 1
             ev = v[bigIdx]
-            rot = math.atan2(ev[1], ev[0])
+            rot = -math.atan2(ev[1], ev[0])
 
             #cv2.imwrite("et.png", mask)
             #import sys
@@ -109,8 +111,7 @@ if __name__ == "__main__":
             if filename[-7:] == ".pickle":
                 if ".annotations." not in filename:
                     if "-47-41" in filename:
-                        if "ckle-99.pn" in filename:
-                            jobs.append(Converter(files[0].split("/")[-1], filename))
+                        jobs.append(Converter(files[0].split("/")[-1], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 50
     limit = cpuCores
@@ -139,8 +140,6 @@ if __name__ == "__main__":
             pass
 
     print("All jobs checked", flush=True)
-    import sys
-    sys.exit(0)
 
     #now we merge those detections into the original file structures
     #basically bring it into a common format
