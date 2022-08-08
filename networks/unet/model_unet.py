@@ -107,12 +107,13 @@ class SmallerUnet(nn.Module):
 
 
 class ZDUNet(nn.Module):
-    def __init__(self, num_classes=2):
+    def __init__(self, num_classes=2, num_channels=1):
         super(ZDUNet, self).__init__()
         self.num_classes = num_classes
+        self.num_channels = num_channels
 
         # convolutions in contracting path
-        self.left_conv1 = DoubleConvBN(1, 8)
+        self.left_conv1 = DoubleConvBN(self.num_channels, 8)
         self.left_conv2 = DoubleConvBN(8, 16)
         self.left_conv3 = DoubleConvBN(16, 32)
         self.left_conv4 = DoubleConvBN(32, 64)

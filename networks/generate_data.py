@@ -1,4 +1,6 @@
 #!/usr/bin/python
+import time
+import multiprocessing
 import rospy
 import pickle
 import os
@@ -11,25 +13,24 @@ import copy
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
-labels_out = np.empty((0, 1526))
-data_out = np.empty((0, 1526, 2))
-
 rotationIndex = 6   # how many times rotate one frame
 testingIndex = 6    # ratio of saving to testing folder
 dimIndex = 4    # how many dimensions to keep (in order: 1. x-coord, 2. y-coord, 3. lidar pertinence, 4. intensity)
 
-datasetPath = "../data/results/lanoising"
-scanField = "lanoising"
-outputPath = "./bags/" + datasetPath.split("/")[-1] + "-" + scanField
-os.makedirs(outputPath, exist_ok=True)
-os.makedirs(os.path.join(outputPath, 'training'), exist_ok=True)
-os.makedirs(os.path.join(outputPath, 'testing'), exist_ok=True)
+datasetPath = "../data/results/lanoising/"
+scanFields = ["scans", "lanoising"]
+gtPath = "../data/gt"
 
-class DataGenerator:
-    def __init__(self, filename, target_path, version="extrapolated"):
+class DataGenerator(multiprocessing.Process):
+    def __init__(self, path, folder, filename, target_path, scanField, version="extrapolated"):
+        multiprocessing.Process.__init__(self)
 
+        self.path = path
+        self.folder = folder
+        self.filename = filename
         self.target_path = target_path
-        with open(filename, "rb") as f:
+        self.scanField = scanField
+        with open(os.path.join(path, folder, filename), "rb") as f:
             self.data = pickle.load(f)
         self.version = version
         self.save_id = 0
@@ -48,23 +49,26 @@ class DataGenerator:
 
         self.tmp_cars = []
 
-    def generate(self):
+    def run(self):
         print("Processing to target {}".format(self.target_path))
-        n = len(self.data[scanField])
-        scans = ["sick_back_right", "sick_back_left", "sick_back_middle", "sick_front"]
+        n = len(self.data[self.scanField])
+
+        scans = list(self.data[self.scanField][0].keys())
+        # FIXME: add all possible topics to the dictionary
+        scans_z_coords = {"sick_back_right": 0.2, "sick_back_left": 0.2, "sick_back_middle": 1, "sick_front": 0.6}
 
         for i in range(n):
-            if i % 100 == 0:
+            if i % 1000 == 0 and i != 0:
                 print("Processing frame {}/{}". format(i, n-1))
             self.init_lines(i)
             data = np.empty((0, dimIndex))
             labels = np.empty(0)
 
             for scan_id, lidar in enumerate(scans):
-                for j in range(len(self.data[scanField][i][lidar])):
-                    point = self.data[scanField][i][lidar][j]
+                for j in range(len(self.data[self.scanField][i][lidar])):
+                    point = self.data[self.scanField][i][lidar][j]
                     labels = np.hstack((labels, self.is_car(point, scan_id)))
-                    point[2] = 0.3 * scan_id + 0.4
+                    point[2] = scans_z_coords[lidar]
                     data = np.vstack((data, point[:dimIndex]))
 
             # rotate the frame multiple times and save it
@@ -99,9 +103,6 @@ class DataGenerator:
                 plt.gca().set_aspect('equal', adjustable='box')
                 plt.draw()
                 plt.show()"""
-
-        # self.save_h5()
-        # self.stack_to_global()
 
     def init_lines(self, i):
         # cars = self.data["annotations"][i]
@@ -201,128 +202,61 @@ class DataGenerator:
 
         return best_id
 
-    def generate_img(self, data, labels):
-
-        center = np.mean(data[:, :2], axis=0)
-        grid = np.zeros((3, self.H, self.W))
-        grid_labels = np.zeros((self.H, self.W))
-
-        ids = data[:, 2] == 0
-        pts = data[ids, :2]
-        lbls = labels[ids]
-        rows = np.expand_dims(np.ceil(self.H // 2 - 1 - ((pts[:, 1] - center[1]) / self.resolution)), axis=1)
-        cols = np.expand_dims(np.ceil(self.W // 2 - 1 + ((pts[:, 0] - center[0]) / self.resolution)), axis=1)
-        ids = np.nonzero(np.logical_and.reduce(
-            (rows[:, 0] >= 0, rows[:, 0] <= self.H - 1, cols[:, 0] >= 0, cols[:, 0] <= self.W - 1)))
-        rows = rows[ids].astype(int)
-        cols = cols[ids].astype(int)
-        lbls = lbls[ids]
-        grid[0][rows[:], cols[:]] = 1
-        grid_labels[rows[lbls != -1], cols[lbls != -1]] = 1
-
-        ids = data[:, 2] == 1
-        pts = data[ids, :2]
-        lbls = labels[ids]
-        rows = np.expand_dims(np.ceil(self.H // 2 - 1 - ((pts[:, 1] - center[1]) / self.resolution)), axis=1)
-        cols = np.expand_dims(np.ceil(self.W // 2 - 1 + ((pts[:, 0] - center[0]) / self.resolution)), axis=1)
-        ids = np.nonzero(np.logical_and.reduce(
-            (rows[:, 0] >= 0, rows[:, 0] <= self.H - 1, cols[:, 0] >= 0, cols[:, 0] <= self.W - 1)))
-        rows = rows[ids].astype(int)
-        cols = cols[ids].astype(int)
-        lbls = lbls[ids]
-        grid[1][rows[:], cols[:]] = 1
-        grid_labels[rows[lbls != -1], cols[lbls != -1]] = 1
-
-        ids = data[:, 2] == 2
-        pts = data[ids, :2]
-        lbls = labels[ids]
-        rows = np.expand_dims(np.ceil(self.H // 2 - 1 - ((pts[:, 1] - center[1]) / self.resolution)), axis=1)
-        cols = np.expand_dims(np.ceil(self.W // 2 - 1 + ((pts[:, 0] - center[0]) / self.resolution)), axis=1)
-        ids = np.nonzero(np.logical_and.reduce(
-            (rows[:, 0] >= 0, rows[:, 0] <= self.H - 1, cols[:, 0] >= 0, cols[:, 0] <= self.W - 1)))
-        rows = rows[ids].astype(int)
-        cols = cols[ids].astype(int)
-        lbls = lbls[ids]
-        grid[2][rows[:], cols[:]] = 1
-        grid_labels[rows[lbls != -1], cols[lbls != -1]] = 1
-
-        plt.figure()
-        plt.imshow(grid.transpose(1, 2, 0))
-        plt.imshow(grid_labels)
-        plt.show()
-        input()
-
-        self.labels_imgs = np.vstack((self.labels_imgs, [grid_labels]))
-        self.data_imgs = np.vstack((self.data_imgs, [grid]))
-
-    def save_h5(self):
-        print("Saving data of shape: ", self.data_out.shape, self.labels_out.shape)
-        f = h5py.File(self.target_path + ".h5", 'w')
-        lab = f.create_dataset("labels", data=self.labels_out)
-        dat = f.create_dataset("data", data=self.data_out)
-        f.close()
-
     def save_np(self, pc_out, labels):
-        # np.save(os.path.join(self.target_path, str(self.save_id) + "pc.npy"), pc_out, allow_pickle=False)
-        # np.save(os.path.join(self.target_path, str(self.save_id) + "l.npy"), labels, allow_pickle=False)
+        #print(os.path.join(self.target_path, str(self.save_id) + ".npz"))
         np.savez(os.path.join(self.target_path, str(self.save_id) + ".npz"), pc=pc_out, labels=labels, allow_pickle=False)
-
-    def stack_to_global(self):
-        global data_out, labels_out
-        data_out = np.vstack((data_out, self.data_out))
-        labels_out = np.vstack((labels_out, self.labels_out))
-
 
 if __name__ == "__main__":
 
-    #goodbags = []
-    #with open("goodbags", "r") as f:
-    #    goodbags = f.read()
-    #goodbags = goodbags.split("\n")
-    #goodbags = filter(None, goodbags)
-    #goodbags = [x.split(" ")[0] + ".bag.pickle" for x in goodbags]
-    #print(goodbags)
+    gtBags = []
+    for files in os.walk(gtPath):
+        for fn in files[2]:
+            if "-lidar.pkl" in fn:
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag.pickle"
+                gtBags.append(fn)
 
+    evalBags = []
     bags = []
-    for folders in os.walk(datasetPath):
-        if folders[0] == datasetPath:
-            bags = folders[2]
-            break
-    # print(bags)
-
-    for files in os.walk(outputPath):
+    for files in os.walk(datasetPath):
         for filename in files[2]:
-            if filename[:-3] in bags:
-                idx = bags.index(filename[:-3])
-                del bags[idx]
+            path = datasetPath
+            folder = files[0][len(path):]
+            if filename in gtBags:
+                evalBags.append([path, folder, filename])
+            else:
+                bags.append([path, folder, filename])
 
-    # print("Some bags maybe skipped")
     print(bags)
 
-    for files in os.walk(outputPath):
-        for filename in files[2]:
-            if filename[:-3] in bags:
-                idx = bags.index(filename[:-3])
-                del bags[idx]
+    jobs = []
+    for scanField in scanFields:
+        outputPath = "./bags/" + scanField
 
-    print("Some bags maybe skipped")
-    print(bags)
-
-    #usebags = []
-    #for i in bags:
-    #    if i in goodbags:
-    #        usebags.append(i)
-
-    #print(usebags)
-    #for i in range(len(usebags)):
-    #    print(i)
-    #    print(usebags[i])
-
-    for i in range(len(bags)):
-        if i % testingIndex == 0:
-            target_dir = os.path.join(outputPath, 'testing', bags[i][:-11])     # [:-11] is used to discard extension .bag.pickle
+        for i in range(len(bags)):
+            if i % testingIndex == 0:
+                target_dir = os.path.join(outputPath, 'testing', bags[i][2][:-11])
+            else:
+                target_dir = os.path.join(outputPath, 'training', bags[i][2][:-11])
+            os.makedirs(target_dir, exist_ok=True)
+            jobs.append(DataGenerator(bags[i][0], bags[i][1], bags[i][2], target_dir, scanField))
+            print("Adding job for %s for %s" % (scanField, bags[i][2]))
+        for i in range(len(evalBags)):
+            target_dir = os.path.join(outputPath, 'evaluation', evalBags[i][2][:-11])
+            os.makedirs(target_dir, exist_ok=True)
+            jobs.append(DataGenerator(evalBags[i][0], evalBags[i][1], evalBags[i][2], target_dir, scanField))
+            print("Adding job for %s for %s" % (scanField, evalBags[i][2]))
+     
+    print("Spawned %i processes" % (len(jobs)), flush = True)
+    maxCores = 32
+    limit = maxCores
+    batch = maxCores
+    for i in range(len(jobs)):
+        if i < limit:
+            jobs[i].start()
         else:
-            target_dir = os.path.join(outputPath, 'training', bags[i][:-11])
-        os.makedirs(target_dir, exist_ok=True)
-        gen = DataGenerator(os.path.join(datasetPath, bags[i]), target_dir)
-        gen.generate()
+            for j in range(limit):
+                jobs[j].join()
+            limit += batch
+            jobs[i].start()

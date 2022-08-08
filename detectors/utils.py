@@ -162,17 +162,16 @@ class Visualise(multiprocessing.Process):
 
     def drawFrame(self, idx):
 
-        scans = self.data["scans"][idx]
+        scans = self.data["lanoising"][idx]
         #scans = combineScans([scans["sick_back_left"], scans["sick_back_right"], scans["sick_back_middle"], scans["sick_front"]])
-        scans = combineScans(self.data["scans"][idx])
 
         fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
-        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], [], 3, False)
+        drawImgFromPoints(fn, scans, [], [], self.data["extrapolated"][idx], [], 3, False)
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/results/temporal-new-0.8-50-6-75-12"
-    outPath = "../visualisation/temporal"
+    datasetPath = "../data/results/lanoising"
+    outPath = "../visualisation/lanoising"
     os.makedirs(outPath, exist_ok=True)
 
     jobs = []
@@ -180,7 +179,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Visualise(datasetPath, outPath, files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 16
+    maxCores = 8
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):

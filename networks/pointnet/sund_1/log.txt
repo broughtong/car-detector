@@ -1,5 +1,0 @@
-bs: 128, n_epochs: 50, lr: 0.0001, feature_trans: True, optim: adam, momentum: 0.9, weight_dec: 0,weight: 1, numc: 2, normalize: True
-Epoch 0 started
-Epoch: 000 	 Trn Loss: 0.164 	 Val Loss: 0.327 Acc: 0.891
-Epoch 1 started
-Epoch: 001 	 Trn Loss: 0.093 	 Val Loss: 0.340 Acc: 0.901

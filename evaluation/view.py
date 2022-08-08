@@ -14,11 +14,11 @@ detectionGraphLimit = 5.0
 confusionGraphLimit = 20.0
 graph_resolution = 250
 detectionThreshold = 1.0
-closestOnly = True
+closestOnly = False
 
-evalName = "eval-graphtest"
+evalName = "eval-gt"
 datasetPaths = {"../data/results/detector-s": "annotations"}
-datasetPaths["../data/results/temporal-new-0.8-50-5-50-10"] = "extrapolated"
+#datasetPaths["../data/results/temporal-new-0.8-50-5-50-10"] = "extrapolated"
 
 #datasetPaths["../data/results/maskrcnn_scans_rectified-debug/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-l"] = "maskrcnn"
@@ -26,7 +26,7 @@ datasetPaths["../data/results/temporal-new-0.8-50-5-50-10"] = "extrapolated"
 #    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
 visualisationPath = "../visualisation/eval-" + evalName
 tfPath = "../data/static_tfs"
-gtPath = "../data/gt"
+gtPath = "/home/george/carloc/annotator/car_anotation/out"
 
 resultsPath = os.path.join("./results/", evalName)
 
@@ -103,17 +103,21 @@ def evaluateFile(filename, method, filePart):
     with open(gtfn, "rb") as f:
         gtdata = pickle.load(f, encoding='latin1')
     frameCounter = 0
-    for frame in gtdata[1]: #back middle sensor, higher framerate
+    for frame in gtdata[3]: #back middle sensor, higher framerate
         frameCounter += 1
 
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
         if gttime not in data["ts"]:
-            print("Warning, no data for gt!", fn, gtfn)
-            #print(fn, gtfn)
-            #print(frame, frameCounter)
-            #print(frame[0].secs, frame[0].nsecs)
-            #print(gttime)
             continue
+            print("Warning, no data for gt!", fn, gtfn)
+            print(fn, gtfn)
+            print(frame, frameCounter)
+            print(frame[0].secs, frame[0].nsecs)
+            print(gttime)
+
+            print("==")
+            gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
+            sys.exit(0)
 
         dataFrameIdx = data["ts"].index(gttime)
         dataFrame = data["scans"][dataFrameIdx]
@@ -139,13 +143,14 @@ def evaluateFile(filename, method, filePart):
             yaw = math.atan2(2.0*(qy*qz + qw*qx), qw*qw - qx*qx - qy*qy + qz*qz)
             car = [*position[:2], yaw-rotation]
             if not closestOnly:
-                frameAnnotations.append(car)
+                n = [-car[0], -car[1], car[2]]
+                frameAnnotations.append(n)
             else:
                 if closestCar == None:
                     closestCar = car
                 else:
-                    distOld = (closestCar[0]**2) + (closestCar[1]**2)) ** 0.5
-                    distNew = (car[0]**2) + (car[1]**2)) ** 0.5
+                    distOld = ((closestCar[0]**2) + (closestCar[1]**2)) ** 0.5
+                    distNew = ((car[0]**2) + (car[1]**2)) ** 0.5
                     if distNew < distOld:
                         closestCar = car
 
@@ -244,7 +249,8 @@ def evaluateFile(filename, method, filePart):
         
         cols = [[255, 128, 128]] * len(frameAnnotations)
         meth = method.split("/")[-1]
-        utils.drawImgFromPoints("../visualisation/" + evalName + "/" + filename + "-" + str(meth) + "-" + str(frameCounter) + ".png", dataFrame, [], [], gts, detections, 3)
+        if len(gts):
+            utils.drawImgFromPoints("../visualisation/" + evalName + "/" + filename + "-" + str(meth) + "-" + str(frameCounter) + ".png", dataFrame, [], [], gts, [], 3)
 
     #recall distance
     for val in np.linspace(0.0, confusionGraphLimit, num=graph_resolution):
@@ -375,13 +381,10 @@ if __name__ == "__main__":
             fp_range[method][val] = 0
 
         for files in os.walk(method):
-            #if files[0] is not method:
-                for filename in files[2]:
-                    if filename[-7:] == ".pickle":
-                        if "-11-16-03-33" in filename:
-                            filePart = datasetPaths[method]
-                            evaluateFile(filename, method, filePart)
-                break
+            for filename in files[2]:
+                if filename[-7:] == ".pickle":
+                    filePart = datasetPaths[method]
+                    evaluateFile(filename, method, filePart)
     print("Generating Graphs")
     drawGraphs()
 

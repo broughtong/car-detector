@@ -18,6 +18,7 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
+gtPath = "../data/gt"
 datasetPath = "../data/rosbags/"
 outputPath = "../data/extracted/"
 lp = lg.LaserProjection()
@@ -29,12 +30,13 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Extractor(multiprocessing.Process):
-    def __init__(self, path, folder, filename):
+    def __init__(self, path, folder, filename, gtBags):
         multiprocessing.Process.__init__(self)
 
         self.path = path
         self.folder = folder
         self.filename = filename
+        self.gtBags = gtBags
         self.lastX, self.lastY = None, None
         self.distThresh = 0.1
         self.fileCounter = 0
@@ -43,11 +45,20 @@ class Extractor(multiprocessing.Process):
         self.trans = []
         self.ts = []
 
-        self.scanTopics = ["/back_left/sick_safetyscanners/scan", 
-                "/back_right/sick_safetyscanners/scan", 
-                "/back_middle/scan",
-                "/front/sick_safetyscanners/scan"]
-        self.synchroniseToTopic = "/front/sick_safetyscanners/scan" #MUST always be last from above list
+        self.gtbag = None
+        for i in gtBags:
+            if i[2] == self.filename:
+                self.gtbag = i
+        if self.gtbag:
+            with open(os.path.join(*self.gtbag[:2], self.gtbag[3]), "rb") as f:
+                self.gtbag = pickle.load(f, encoding="latin1")
+
+        self.scanTopics = ["/back_right/sick_safetyscanners/scan", 
+                "/front/sick_safetyscanners/scan",
+                "/back_left/sick_safetyscanners/scan",
+                "/back_middle/scan"]
+        self.synchroniseToTopic = self.scanTopics[-1] #MUST always be last from list (back middle higher fps)
+        self.topicInGT = 1
         self.topicBuf = []
         for _ in range(len(self.scanTopics)-1):
             self.topicBuf.append(None)
@@ -76,7 +87,7 @@ class Extractor(multiprocessing.Process):
                 self.position = msg.pose.pose.position
                 self.orientation = msg.pose.pose.orientation
         self.saveScans()
-        print("Process finished for file %s" % (self.filename), flush = True)
+        print("Process finished for file %s, %i frames" % (self.filename, self.fileCounter), flush = True)
 
     def odometryMoved(self):
 
@@ -196,8 +207,18 @@ class Extractor(multiprocessing.Process):
         msgs = copy.deepcopy(self.topicBuf)
         msgs.append(msg)
 
-        if not self.odometryMoved():
-            return
+        if self.gtbag is None:
+            if not self.odometryMoved():# and self.filename not in self.gtBags:
+                return
+        else:
+            tFound = False
+            for frame in self.gtbag[self.topicInGT]:
+                gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
+                if gttime == t:
+                    tFound = True
+                    break
+            if tFound == False:
+                return
         #print("Robot moved!", flush=True)
 
         combined, trans, ts = self.combineScans(msgs, t)
@@ -213,13 +234,15 @@ class Extractor(multiprocessing.Process):
 
 if __name__ == "__main__":
 
-    #rosbagList = []
-    #with open("./rosbagList") as f:
-    #    rosbagList = f.read()
-    #rosbagList = rosbagList.split("\n")
-    #rosbagList = list(filter(None, rosbagList))
-    #rosbagList = [x.split(" ")[0] + ".bag" for x in rosbagList]
-    #print(rosbagList)
+    gtBags = []
+    for files in os.walk(gtPath):
+        for fn in files[2]:
+            if "-lidar.pkl" in fn:
+                origFn = fn
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag"
+                gtBags.append([gtPath, files[0][len(gtPath)+1:], fn, origFn])
 
     jobs = []
     for files in os.walk(datasetPath):
@@ -228,9 +251,8 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 #if filename in rosbagList:
-                jobs.append(Extractor(path, folder, filename))
-    #jobs = jobs[:1]
-    maxCores = 16
+                jobs.append(Extractor(path, folder, filename, gtBags))
+    maxCores = 10
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)

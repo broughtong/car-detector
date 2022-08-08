@@ -10,8 +10,8 @@ from unet_dataset import UNetCarDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bs', type=int, default=16, help='input batch size')
-parser.add_argument('--nepoch', type=int, default=50, help='number of epochs to train for')
-parser.add_argument('--outf', type=str, default='seg', help='output folder')
+parser.add_argument('--nepoch', type=int, default=10, help='number of epochs to train for')
+parser.add_argument('--outf', type=str, default='models', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
 parser.add_argument('--lr', type=float, default=0.0001, help="dataset path")
 parser.add_argument('--optim', default='adam', help="optimizer for backprop")
@@ -23,6 +23,7 @@ parser.add_argument('--start_epoch', type=int, default=0, help="specify the firs
 parser.add_argument('--dataset', type=str, help="specify dataset")
 parser.add_argument('--numc', type=int, default=2, help="number of classes")
 parser.add_argument('--lanoise', action='store_true', help="train on lanoised data")
+parser.add_argument('--num_channels', type=int, default=2, help="2")
 opt = parser.parse_args()
 
 
@@ -30,8 +31,8 @@ def save_model(model, destination):
     torch.save(model.state_dict(), destination, _use_new_zipfile_serialization=False)
 
 
-def load_model(num_classes=2):
-    model = ZDUNet(num_classes=num_classes)
+def load_model(num_classes=2, num_channels=1):
+    model = ZDUNet(num_classes=num_classes, num_channels=num_channels)
     model.load_state_dict(torch.load(opt.model, map_location='cpu'))
     return model
 
@@ -53,35 +54,36 @@ except OSError:
 log_file = '%s/log.txt' % opt.outf
 f = open(log_file, 'a+')
 f.write("bs: {}, n_epochs: {}, lr: {}, optim: {}, momentum: {}, weight_dec: {},weight: {}, lanoise: {}\n".format(opt.bs,
-                                                                                                                 opt.nepoch,
-                                                                                                                 opt.lr,
-                                                                                                                 opt.optim,
-                                                                                                                 opt.momentum,
-                                                                                                                 opt.weight_decay,
-                                                                                                                 opt.weight,
-                                                                                                                 opt.lanoise))
+                             opt.nepoch,
+                             opt.lr,
+                             opt.optim,
+                             opt.momentum,
+                             opt.weight_decay,
+                             opt.weight,
+                             opt.lanoise))
 f.close()
 
 device = get_device(opt.gpu)
 
 # new datasets
-data_path = "/datafast/janota/lanoising-ts4-"
+data_path = "../bags/"
 if opt.lanoise:
     data_path += "lanoising"
 else:
     data_path += "scans"
+print("Dataset Path: ", data_path)
 
-trn_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=True)
-val_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=False)
+trn_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=True, num_channels=opt.num_channels)
+val_dataset = UNetCarDataset(path=data_path, num_classes=opt.numc, trn=False, num_channels=opt.num_channels)
 
 trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=opt.bs, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=opt.bs, shuffle=True)
 
 # init model
 if opt.model != '':
-    model = load_model(num_classes=opt.numc).to(device)
+    model = load_model(num_classes=opt.numc, num_channels=opt.num_channels).to(device)
 else:
-    model = ZDUNet(num_classes=opt.numc).to(device)
+    model = ZDUNet(num_classes=opt.numc, num_channels=opt.num_channels).to(device)
 
 # init optimizer
 if opt.optim == 'sgd':
@@ -133,8 +135,7 @@ for epoch in range(opt.start_epoch, opt.nepoch):
     for it, batch in enumerate(trn_loader):
         if it % 100 == 0:
             now = time.time()
-            print(
-                f".  Iteration {it} / {total_batch_num} - elapsed {int(now - start_iter) / 60} min, total {int(now - start) / 60} min")
+            print(f".  Iteration {it} / {total_batch_num} - elapsed {int(now - start_iter) / 60} min, total {int(now - start) / 60} min")
             start_iter = now
         input_data = batch['data'].to(device).requires_grad_()
         label = batch['labels'].to(device)

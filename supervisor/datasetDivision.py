@@ -16,10 +16,11 @@ def divide(testingSplit, datasetPath, gtPath):
     evalBags = []
     for files in os.walk(gtPath):
         for fn in files[2]:
-            fn = fn.split("-")[:-1]
-            fn = "-".join(fn)
-            fn += ".bag"
-            evalBags.append(fn)
+            if "-lidar.pkl" in fn:
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag"
+                evalBags.append(fn)
     evalBags = list(set(evalBags))
 
     #get list of rosbags
@@ -98,5 +99,5 @@ def divide(testingSplit, datasetPath, gtPath):
 
 if __name__ == "__main__":
 
-    divide(testingSplit=10, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
-    divide(testingSplit=10, datasetPath="../annotations/scans/mask", gtPath="../data/gt")
+    divide(testingSplit=6, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
+    divide(testingSplit=6, datasetPath="../annotations/scans/mask", gtPath="../data/gt")

@@ -11,6 +11,9 @@ def pc_normalize(pc):
     # pc[:, 0:2] = pc[:, 0:2] - center
     pc[:, 0:2] = (pc[:, 0:2] + 40) / 80
 
+    if pc.shape[1] > 2:
+        pc[:, 2] /= np.max(pc[:, 2])
+
     return pc
 
 
@@ -37,11 +40,12 @@ def generate_pc(point_set, label, npoints):
 
 
 class CarDetectorDataset():
-    def __init__(self, path, num_classes=2, npoints=1024, normalize=True, trn=True):
+    def __init__(self, path, num_classes=2, npoints=1024, normalize=True, trn=True, num_dimensions=2):
         self.npoints = npoints
         self.normalize = normalize
         self.num_classes = num_classes
         self.path = path
+        self.num_dimensions = num_dimensions
 
         if trn:
             self.path = path + "/training"
@@ -73,7 +77,8 @@ class CarDetectorDataset():
             points = f['pc']
             labels = f['labels']
 
-        points = points[:, :2]
+        points[:, [2, 3]] = points[:, [3, 2]]
+        points = points[:, :self.num_dimensions]
         labels[labels != -1] = 1
         labels[labels == -1] = 0
 
