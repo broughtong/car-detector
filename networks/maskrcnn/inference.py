@@ -11,8 +11,8 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-modelName = "./models/alpha/scans-25-04-22-18_08_16.pth"
-resultsPath = "../../data/results/maskrcnn_scans_rot_fix"
+modelName = "./models/hand/hand-08-05-22-20_40_05.pth"
+resultsPath = "/home/broughtong/external/broughtong/imgs"
 datasetPath = "../../annotations/scans/mask/evaluation/imgs"
 
 class Dataset(object):
@@ -36,7 +36,6 @@ def image_loader(image_name):
     image = Image.open(image_name).convert("RGB")
     loader = T.Compose([T.ToTensor()])
     image = loader(image, None)[0]
-    #image = image.unsqueeze(0)
     if torch.cuda.is_available():
         return [image.cuda()]
     else:
@@ -54,8 +53,8 @@ def main():
 
     imgs = list(os.listdir(datasetPath))
     for imgfn in imgs:
-        print(imgfn)
         path = os.path.join(datasetPath, imgfn)
+        print(path)
         img = image_loader(path)
         result = model(img)
 

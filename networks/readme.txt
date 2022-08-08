@@ -5,14 +5,6 @@ generate_data.py
 	- create instance of DataGenerator(path to bag, target name)
 	- run class function generate()
 
-merge_bags.py
-- for merging multiple h5py files
-- loop through bags that should be regenerated (in code array "bags")
-	- open every bag with function load_h5 which opens the h5py files
-	- stack the data
-- after all data are stacked, call save_h5
-
-
 
 %-------------------------------------------------------------------------------------
 PointNet

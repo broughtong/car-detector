@@ -27,7 +27,9 @@ class Dataset(object):
         img = Image.open(img_path).convert("RGB")
         mask = Image.open(mask_path)
 
+
         mask = np.array(mask)
+        mask = mask[:, :, 1]
         obj_ids = np.unique(mask)
         obj_ids = obj_ids[1:]
 
@@ -96,19 +98,20 @@ def main():
 
     num_classes = 2
     dataset = Dataset(os.path.join(datasetPath, "training"), get_transform(train=True))
-    dataset_test = Dataset(os.path.join(datasetPath, "testing"), get_transform(train=False))
+    #dataset_test = Dataset(os.path.join(datasetPath, "testing"), get_transform(train=False))
 
     #indices = torch.randperm(len(dataset)).tolist()
     #dataset = torch.utils.data.Subset(dataset, indices[:-50])
     #dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4, collate_fn=utils.collate_fn)
-    data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False, num_workers=4, collate_fn=utils.collate_fn)
+    #data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False, num_workers=4, collate_fn=utils.collate_fn)
 
     model = get_model_instance_segmentation(num_classes)
     model.to(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.SGD(params, lr=0.0001, momentum=0.9, weight_decay=0.0005)
     optimizer = torch.optim.SGD(params, lr=0.0005, momentum=0.9, weight_decay=0.0005)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
@@ -117,9 +120,9 @@ def main():
     for epoch in range(num_epochs):
         train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=1)
         lr_scheduler.step()
-        evaluate(model, data_loader_test, device=device)
+        #evaluate(model, data_loader_test, device=device)
 
-        modelpath = datetime.datetime.now().strftime("models/" + field + "-%d-%m-%y-%H_%M_%S.pth")
+        modelpath = datetime.datetime.now().strftime("models/hand-%d-%m-%y-%H_%M_%S.pth")
         os.makedirs("./models", exist_ok=True)
         torch.save(model, modelpath)
 

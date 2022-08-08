@@ -86,10 +86,10 @@ class STNkd(nn.Module):
 
 
 class PointNetfeat(nn.Module):
-    def __init__(self, global_feat = True, feature_transform = False, dev=0):
+    def __init__(self, global_feat=True, feature_transform=False, dev=0, num_dim=2):
         super(PointNetfeat, self).__init__()
         # self.stn = STN3d(dev)
-        self.conv1 = torch.nn.Conv1d(2, 64, 1)
+        self.conv1 = torch.nn.Conv1d(num_dim, 64, 1)
         self.convN = torch.nn.Conv1d(64, 64, 1)     # added
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
@@ -155,11 +155,11 @@ class PointNetCls(nn.Module):
 
 
 class PointNetDenseCls(nn.Module):
-    def __init__(self, k = 3, feature_transform=False, dev=0):
+    def __init__(self, k=3, feature_transform=False, dev=0, num_dimensions=2):
         super(PointNetDenseCls, self).__init__()
         self.k = k
         self.feature_transform=feature_transform
-        self.feat = PointNetfeat(global_feat=False, feature_transform=feature_transform, dev=dev)
+        self.feat = PointNetfeat(global_feat=False, feature_transform=feature_transform, dev=dev, num_dim=num_dimensions)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)

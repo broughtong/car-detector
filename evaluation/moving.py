@@ -10,31 +10,16 @@ import pickle
 import os
 import sys
     
-detectionGraphLimit = 2.0
-confusionGraphLimit = 15.0
+detectionGraphLimit = 5.0
+confusionGraphLimit = 20.0
 graph_resolution = 250
 detectionThreshold = 1.0
 
-evalName = "full-train-5"
+evalName = "moving"
 datasetPaths = {"../data/results/detector-s": "annotations"}
-datasetPaths["../data/results/temporal-new-0.8-50-6-75-6"] = "extrapolated"
-datasetPaths["../data/results/maskrcnn_scans_rectified-xy/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
-minimumMove = 0.1
-closestOnly = False
+datasetPaths["../data/results/temporal-new-0.8-50-5-50-10"] = "extrapolated"
 
-evalName = "heval-temp-mask-plain"
-datasetPaths = {}
-#datasetPaths = {"../data/results/detector-s": "annotations"}
-#datasetPaths["../data/results/temporal-new-0.8-50-5-50-10"] = "extrapolated"
-datasetPaths["/home/broughtong/external/broughtong/maskrcnn_scans_rectified/scans-06-05-22-20_22_40.pth"] = "maskrcnn"
-#datasetPaths["/home/broughtong/external/broughtong/maskrcnn_scans_rectified/lanoising-06-05-22-23_57_24.pth"] = "maskrcnn"
-datasetPaths["/home/broughtong/external/broughtong/maskrcnn_scans_rectified/scans-06-05-22-20_18_46.pth"] = "maskrcnn"
-
-
-#datasetPaths["/home/broughtong/external/broughtong/maskrcnn_scans_rectified/lanoising-07-05-22-00_09_06.pth"] = "maskrcnn"
-#datasetPaths["../data/results/pns-eval-12"] = "pointnet"
-#datasetPaths["../data/results/pns-eval-4"] = "pointnet"
-
+#datasetPaths["../data/results/maskrcnn_scans_rectified-debug/scans-25-04-22-18_08_16.pth"] = "maskrcnn"
 #datasetPaths["../data/results/maskrcnn_scans_rectified-l"] = "maskrcnn"
 #for i in range(1200, 2000, 100):
 #    datasetPaths["../data/results/temporal-prc-%s-0.4-0" % (str(i))] = "extrapolated"
@@ -110,8 +95,6 @@ def evaluateFile(filename, method, filePart):
     gtdata = []
     tfdata = []
 
-    lastMove = None
-
     with open(fn, "rb") as f:
         data = pickle.load(f)
     with open(tffn, "rb") as f:
@@ -121,6 +104,7 @@ def evaluateFile(filename, method, filePart):
     frameCounter = 0
     for frame in gtdata[1]: #back middle sensor, higher framerate
         frameCounter += 1
+
         gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
         if gttime not in data["ts"]:
             print("Warning, no data for gt!", fn, gtfn)
@@ -134,22 +118,8 @@ def evaluateFile(filename, method, filePart):
         dataFrame = data["scans"][dataFrameIdx]
         dataFrame = combineScans(dataFrame)
 
-        if lastMove is None:
-            #no previous frame, set position
-            lastMove = data["trans"][dataFrameIdx]
-        else:
-            #prevent stationary vehicle having multiple eval frames in same spot
-            dx = lastMove[0][-1] - data["trans"][dataFrameIdx][0][-1]
-            dy = lastMove[1][-1] - data["trans"][dataFrameIdx][1][-1]
-            diff = ((dx**2) + (dy**2))**0.5
-            if diff < minimumMove:
-                continue
-            lastMove = data["trans"][dataFrameIdx]
-
         frameAnnotations = []
         frameAnnotations.append(frame[0])
-        closestCar = None
-
         for i in range(1, len(frame)):
             rotation = frame[i][2]
             position = [*frame[i][:2], 0, 1]
@@ -165,19 +135,7 @@ def evaluateFile(filename, method, filePart):
             qw = quat[3]
             yaw = math.atan2(2.0*(qy*qz + qw*qx), qw*qw - qx*qx - qy*qy + qz*qz)
             car = [*position[:2], yaw-rotation]
-            if not closestOnly:
-                frameAnnotations.append(car)
-            else:
-                if closestCar == None:
-                    closestCar = car
-                else:
-                    distOld = ((closestCar[0]**2) + (closestCar[1]**2)) ** 0.5
-                    distNew = ((car[0]**2) + (car[1]**2)) ** 0.5
-                    if distNew < distOld:
-                        closestCar = car
-
-        if closestOnly and closestCar is not None:
-            frameAnnotations.append(closestCar)
+            frameAnnotations.append(car)
 
         #confusion matrix
         detections = copy.deepcopy(data[filePart][dataFrameIdx])
@@ -193,6 +151,14 @@ def evaluateFile(filename, method, filePart):
                     dx = gt[0] - j[0]
                     dy = gt[1] - j[1]
                     diff = ((dx**2) + (dy**2))**0.5
+                    if "scans" in method:
+                        print("===")
+                        #print(filename)
+                        print(frameCounter - 1)
+                        #print(method)
+                        print(gt)
+                        print(j)
+                        print(diff)
                     if diff < detectionThreshold:
                         found = True
                 if found == True:
@@ -226,9 +192,12 @@ def evaluateFile(filename, method, filePart):
                     diff = abs(jo-gto)
                     if diff > (math.pi/2):
                         if jo > gto:
+                            #jo -= (math.pi/2)
                             jo -= (math.pi)
                         else:
+                            #jo += (math.pi/2)
                             gto -= (math.pi)
+                        #print(gto, jo, diff, abs(jo-gto))
                         diff = abs(jo-gto)
                     else:
                         pass #code path only used for comments
@@ -297,6 +266,7 @@ def drawGraphs():
     filteredPrecision = {}
 
     for method in datasetPaths:
+        print(method, lastVal, flush=True)
         tp = tp_range[method][lastVal]
         fn = fn_range[method][lastVal]
         fp = fp_range[method][lastVal]
@@ -343,7 +313,7 @@ def drawGraphs():
             
     makeGraph(gt_det_hit, gt_det_total, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "gtdet" + ".png"))
     makeGraph(det_gt_hit, det_gt_total, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "detgt" + ".png"))
-    makeGraph(rot_error, rot_total, "Rotational Error", "Rotational Error [rad]", "Probability", os.path.join(graphPath, "rot" + ".png"), invert=True)
+    makeGraph(rot_error, rot_total, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "rot" + ".png"))
     try:
         makeGraph(filteredRecall, 1.0, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "recall" + ".png"))
         makeGraph(filteredPrecision, 1.0, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "precision" + ".png"))
@@ -355,7 +325,7 @@ def drawGraphs():
     with open(os.path.join(resultsPath, "conf.txt"), "w") as f:
         f.write(confusionText)
 
-def makeGraph(hists, total, label, xlabel, ylabel, filename, invert=False):
+def makeGraph(hists, total, label, xlabel, ylabel, filename):
 
     fig, ax = plt.subplots()
 
@@ -370,41 +340,14 @@ def makeGraph(hists, total, label, xlabel, ylabel, filename, invert=False):
         for key, value in hists[histKey].items():
             x.append(key)
             if type(total) is not float:
-                if invert:
-                    y.append(1-(value/total[histKey]))
-                else:
-                    y.append(value/total[histKey])
+                y.append(value/total[histKey])
             else:
-                label = histKey.split("/")[-1]
-                if "06-05-22-20_18_46" in label:
-                    y.append(value + 0.02)
-                else:
-                    y.append(value)
+                y.append(value)
         
-        label = histKey.split("/")[-1]
-        if "06-05-22-20_18_46" in label:
-            label = "Hand Annotated"
-        else:
-            label = "Auto Annotated"
-        if label == "detector-s":
-            label = "Simple Detector"
-        if label == "temporal-new-0.8-50-5-50-10":
-            label = "Temporal Filter"
-        if "scans" in label:
-            label = "Mask-RCNN"
-        if "lanoi" in label:
-            label = "Mask-RCNN + Lanoising"
-        ax.plot(x, y, label=label)
-    #ax.set(xlabel=xlabel, ylabel=ylabel, title='')#, fontsize=18)
-    #ax.set_title('',fontweight="bold", size=20) # Title
-    ax.set_ylabel(ylabel, fontsize = 16.0) # Y label
-    ax.set_xlabel(xlabel, fontsize = 16) # X label
+        ax.plot(x, y, label=histKey.split("/")[-1])
+    ax.set(xlabel=xlabel, ylabel=ylabel, title='')
     ax.grid(linestyle="--")
-    ax.set_xlim([5.75, 15])
-    if invert:
-        ax.legend(loc='upper right')
-    else:
-        ax.legend(loc='lower right')
+    ax.legend(loc='lower right')
     plt.ylim([-0.02, 1.02])
     fig.savefig(filename, dpi=250)
     plt.close('all')
@@ -425,12 +368,12 @@ if __name__ == "__main__":
             fp_range[method][val] = 0
 
         for files in os.walk(method):
-            for filename in files[2]:
-                if "2022-02-15-15-08-59.bag" in filename:
-                    continue #moving bag, ignore
-                if filename[-7:] == ".pickle":
-                    filePart = datasetPaths[method]
-                    evaluateFile(filename, method, filePart)
+            #if files[0] is not method:
+                for filename in files[2]:
+                    if filename[-7:] == ".pickle":
+                        #if "-11-16-03-33" in filename:
+                        filePart = datasetPaths[method]
+                        evaluateFile(filename, method, filePart)
     print("Generating Graphs")
     drawGraphs()
 
