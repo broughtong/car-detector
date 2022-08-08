@@ -6,6 +6,7 @@ import math
 import numpy as np
 import copy
 import multiprocessing
+import random
 
 def combineScans(arrOfScans):
 
@@ -17,7 +18,7 @@ def combineScans(arrOfScans):
 
     return np.concatenate(scans)
 
-def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
+def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False, saltPepperProb=None):
 
     #filename
     #scan points
@@ -103,6 +104,16 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
         except:
             pass
 
+    if saltPepperProb:
+        def randomisePixel(existing):
+            r = random.random()
+            if r < saltPepperProb:
+                return 1
+            return existing
+
+        randomFunction = np.vectorize(randomisePixel)
+        img = randomFunction(img)
+
     if dilation is not None:
         kernel = np.ones((dilation, dilation), 'uint8')
         img = cv2.erode(img, kernel, iterations=1)
@@ -138,7 +149,104 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
     if renderAnnotations:
         cv2.putText(img, "%s cars" % (str(len(cars))), (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 3, 50)
 
+    path = os.path.dirname(filename)
+    os.makedirs(path, exist_ok=True)
     cv2.imwrite(filename, img)
+
+def getInAnnotation(scan, annotations):
+
+    carPoints = []
+    nonCarPoints = []
+
+    for point in scan:
+
+        inAnnotation = False
+
+        for annotation in annotations:
+            if isInsideAnnotation(point[:2], annotation):
+                inAnnotation = True
+                break
+
+        if inAnnotation:
+            carPoints.append(point)
+        else:
+            nonCarPoints.append(point)
+
+    return carPoints, nonCarPoints
+
+def isInsideAnnotation(pos, annotation):
+
+    poly = getBoundaryPoints(annotation)
+
+    counterPos = (9999, pos[1])
+    intersects = 0
+
+    for idx in range(len(poly)):
+        pa = poly[idx]
+        pb = poly[0]
+        if idx != len(poly)-1:
+            pb = poly[idx+1]
+
+        print(pos, counterPos, pa, pb)
+        if lineIntersect(pos, counterPos, pa, pb):
+            print("int!")
+            intersects += 1
+
+    return intersects % 2
+
+def getBoundaryPoints(poly):
+
+    centreX = poly[0]#*scale) + (res//2)
+    centreY = poly[1]#*scale) + (res//2)
+    angle = poly[2] % (math.pi*2)
+    height = 4.85# * scale
+    width = 2.4# * scale
+
+    alpha = math.cos(angle) * 0.5
+    beta = math.sin(angle) * 0.5
+
+    a = [centreX - beta * height - alpha * width, centreY + alpha * height - beta * width]
+    b = [centreX + beta * height - alpha * width, centreY - alpha * height - beta * width]
+    c = [2 * centreX - a[0], 2 * centreY - a[1]]
+    d = [2 * centreX - b[0], 2 * centreY - b[1]]
+
+    return a, b, c, d
+
+def lineIntersect(a, b, c, d):
+    o1 = tripletOrientation(a, b, c)
+    o2 = tripletOrientation(a, b, d)
+    o3 = tripletOrientation(c, d, a)
+    o4 = tripletOrientation(c, d, b)
+
+    if o1 != o2 and o3 != o4:
+        return True
+
+    if ((o1 == 0) and colinear(a, c, b)):
+        return True
+    if ((o2 == 0) and colinear(a, d, b)):
+        return True
+    if ((o3 == 0) and colinear(c, a, d)):
+        return True
+    if ((o4 == 0) and colinear(c, b, d)):
+        return True
+    return False
+
+def tripletOrientation(a, b, c):
+    orr = ((b[1] - a[1]) * (c[0] - b[0])) - ((b[0] - a[0]) * (c[1] - b[1]))
+    if orr > 0:
+        return 1
+    elif orr < 0:
+        return -1
+    return 0
+
+def colinear(a, b, c):
+    if ((b[0] <= max(a[0], c[0])) and (b[0] >= min(a[0], c[0])) and (b[1] <= max(a[1], c[1])) and (b[1] >= min(a[1], c[1]))):
+        return True
+    else:
+        return False
+
+
+
 
 class Visualise(multiprocessing.Process):
     def __init__(self, datasetPath, outPath, path, filename):
@@ -167,11 +275,12 @@ class Visualise(multiprocessing.Process):
         scans = combineScans(self.data["scans"][idx])
 
         fn = os.path.join(self.outPath, self.filename + "-" + str(idx) + ".png")
-        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], [], 3, False)
+        drawImgFromPoints(fn, scans, [], [], self.data["annotations"][idx], self.data["extrapolated"][idx], 3, False, saltPepperProb=0.001)
 
 if __name__ == "__main__":
 
     datasetPath = "../data/results/temporal-new-0.8-50-6-75-12"
+    datasetPath = "../../external/broughtong/maskrcnn_scans_rectified/scans-06-05-22-20_22_40.pth"
     outPath = "../visualisation/temporal"
     os.makedirs(outPath, exist_ok=True)
 
@@ -180,7 +289,7 @@ if __name__ == "__main__":
         for filename in files[2]:
             jobs.append(Visualise(datasetPath, outPath, files[0], filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 16
+    maxCores = 1
     limit = maxCores
     batch = maxCores
     for i in range(len(jobs)):

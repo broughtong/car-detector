@@ -18,11 +18,15 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/results/maskrcnn_scans_huge"
 combinePath = "../data/results/lanoising"
-outputPath = "../data/results/maskrcnn_scans_reprocessed-debug"
-combinedOutPath = "../data/results/maskrcnn_scans_rectified-debug"
-#visualisationPath = "../visualisation/"
+modelName = "scans-07-05-22-16_07_18.pth"
+
+datasetPath = "../data/results/maskrcnn_scans"
+datasetPath = "/home/broughtong/external/broughtong/imgs/"
+outputPath = "../data/results/maskrcnn_scans_reprocessed"
+outputPath = "/home/broughtong/external/broughtong/maskrcnn_scans_reprocessed"
+combinedOutPath = "../data/results/maskrcnn_scans_rectified"
+combinedOutPath = "/home/broughtong/external/broughtong/maskrcnn_scans_rectified"
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -41,7 +45,7 @@ class Converter(multiprocessing.Process):
 
         print("Process spawned for file %s" % (self.filename), flush = True)
 
-        with open(os.path.join(datasetPath, self.path, self.filename), "rb") as f:
+        with open(os.path.join(datasetPath, self.filename), "rb") as f:
             self.data = pickle.load(f)
         #combinefn = os.path.join(combinePath, self.filename.split(".pickle")[0]+".pickle")
         #with open(combinefn, "rb") as f:
@@ -63,17 +67,15 @@ class Converter(multiprocessing.Process):
             score = self.data[0]["scores"][idx]
             mask = self.data[0]["masks"][idx]
 
-            if score < 0.8:
+            if score < 0.9:
                 continue
 
-            x = (float(box[0]) + float(box[2])) / 2
-            y = (float(box[1]) + float(box[3])) / 2
-            print(x, y)
+            x = (float(box[1]) + float(box[3])) / 2
+            y = (float(box[0]) + float(box[2])) / 2
             res = 1024
             scale = 25
             x = (x - (res/2)) / scale
             y = (y - (res/2)) / scale
-            print(x, y)
 
             mask = mask[math.floor(box[1]):math.ceil(box[3]), math.floor(box[0]):math.ceil(box[2])]
 
@@ -90,8 +92,7 @@ class Converter(multiprocessing.Process):
             if w[1] > w[0]:
                 bigIdx = 1
             ev = v[bigIdx]
-            rot = math.atan2(ev[1], ev[0])
-
+            rot = -math.atan2(ev[1], ev[0])
             annotation = [x, y, rot]
             annotations.append(annotation)
         self.annotations = annotations
@@ -100,13 +101,11 @@ if __name__ == "__main__":
     
     #extract result from network output into files
     jobs = []
-    for files in os.walk(datasetPath):
+    for files in os.walk(os.path.join(datasetPath, modelName)):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 if ".annotations." not in filename:
-                    if "-47-41" in filename:
-                        if "ckle-99.pn" in filename:
-                            jobs.append(Converter(files[0].split("/")[-1], filename))
+                    jobs.append(Converter(modelName, filename))
     print("Spawned %i processes" % (len(jobs)), flush = True)
     cpuCores = 50
     limit = cpuCores
@@ -135,13 +134,11 @@ if __name__ == "__main__":
             pass
 
     print("All jobs checked", flush=True)
-    import sys
-    sys.exit(0)
 
     #now we merge those detections into the original file structures
     #basically bring it into a common format
     combinableFilenames = []
-    for files in os.walk(outputPath):
+    for files in os.walk(os.path.join(outputPath, modelName)):
         for filename in files[2]:
             if filename[-12:] == ".annotations":
                 combinableFilenames.append(os.path.join(files[0], filename.split(".")[0]))

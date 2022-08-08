@@ -25,12 +25,13 @@ annotationSource = "extrapolated"
 laserPointsFields = ["scans", "lanoising"]
 outputPath = "../annotations/"
 lp = lg.LaserProjection()
-movementThreshold = 0.0
+movementThreshold = 5.0
 gtPath = "../data/gt"
 gtBags = []
+saltPepperNoise = 0.001
 
 #augmentations
-flipV = True
+flipV = False
 rotations = [0, 1, 2, 3, 4, 5, 6]
 
 @contextmanager
@@ -102,9 +103,12 @@ class Annotator(multiprocessing.Process):
             xmax = np.max(pos[1])
             ymin = np.min(pos[0])
             ymax = np.max(pos[0])
+            boxes.append([xmin, ymin, xmax, ymax])
 
             if xmin == xmax or ymin == ymax:
                 return True
+        if len(boxes) == 0:
+            return True
         return False
 
     def drawAnnotation(self, filename, frame, annotations):
@@ -295,7 +299,7 @@ class Annotator(multiprocessing.Process):
         for frame in range(len(self.data["scans"])):
             annotations = self.data[annotationSource][frame]
 
-            if self.filename not in gtBags:
+            if self.filename not in gtBags and "2022-02-15-15-08-59" not in self.filename:
                 #throw away frames without much movement
                 trans = self.data["trans"][frame]
                 x = trans[0][-1]
@@ -320,7 +324,7 @@ class Annotator(multiprocessing.Process):
 
                 #augmentations
                 rotationsToDo = rotations
-                if self.filename in gtBags:
+                if self.filename in gtBags or "2022-02-15-15-08-59" in self.filename:
                     rotationsToDo = [0]
 
                 for rotation in rotationsToDo:
@@ -346,13 +350,33 @@ class Annotator(multiprocessing.Process):
                         o += annotations[i][2]
                         newAnnotations[i] = [*v, o]
 
-                    if self.filename in gtBags:
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + ".png")
+                    if "2022-02-15-15-08-59" in self.filename:
+                        fn = os.path.join(outputPath, scanField, "moving", self.filename + "-" + str(frame) + ".png")
                         utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3)
+                        
+                        #fn = os.path.join(outputPath, scanField, "moving", self.filename + "-" + str(frame) + ".png")
+                        #carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
+                        #badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
+
+                        #fn = os.path.join(outputPath, scanField, "moving", self.filename + "-" + str(frame) + ".png")
+                        #utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
+
+                        #fn = os.path.join(outputPath, scanField, "pointcloud", "all", "cloud", self.filename + "-" + str(frame) + ".")
+                        #self.saveCloud(fn, newScan)
+                        #fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + ".")
+                        #self.saveAnnotations(fn, newScan, newAnnotations)
+
+                    if self.filename in gtBags:
                         
                         fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + ".png")
                         carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
                         badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
+                        if badAnnotation:
+                            continue
+
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3)
+                        
 
                         fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + ".png")
                         utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
@@ -363,14 +387,16 @@ class Annotator(multiprocessing.Process):
                         self.saveAnnotations(fn, newScan, newAnnotations)
 
                     #raw
-                    if self.filename not in gtBags and len(newAnnotations):
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
-                        utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=5)
-                        
+                    if self.filename not in gtBags and len(newAnnotations) and "2022-02-15-15-08-59" not in self.filename:
                         fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
                         carPoints, nonCarPoints = self.getInAnnotation(newScan, newAnnotations)
                         badAnnotation = self.drawAnnotation(fn, frame, newAnnotations)
+                        if badAnnotation:
+                            continue
 
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
+                        utils.drawImgFromPoints(fn, newScan, [], [], [], [], dilation=3, saltPepperProb=saltPepperNoise)
+                        
                         fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
                         utils.drawImgFromPoints(fn, newScan, [], [], newAnnotations, [], dilation=None)
 
@@ -379,7 +405,8 @@ class Annotator(multiprocessing.Process):
                         fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".")
                         self.saveAnnotations(fn, newScan, newAnnotations)
                     
-                    if flipV and len(newAnnotations) and self.filename not in gtBags :
+                    #flip
+                    if flipV and len(newAnnotations) and self.filename not in gtBags and "2022-02-15-15-08-59" not in self.filename:
 
                         fScan = np.copy(newScan)
                         for point in range(len(newScan)):
@@ -389,13 +416,15 @@ class Annotator(multiprocessing.Process):
                             fAnnotations[i][0] = -fAnnotations[i][0]
                             fAnnotations[i][2] = -fAnnotations[i][2]
 
-                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
-                        utils.drawImgFromPoints(fn, fScan, [], [], [], [], dilation=3)
-                        
                         fn = os.path.join(outputPath, scanField, "mask", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
                         carPoints, nonCarPoints = self.getInAnnotation(fScan, fAnnotations)
                         badAnnotation = self.drawAnnotation(fn, frame, fAnnotations) 
+                        if badAnnotation:
+                            continue
 
+                        fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
+                        utils.drawImgFromPoints(fn, fScan, [], [], [], [], dilation=3, saltPepperProb=saltPepperNoise)
+                        
                         fn = os.path.join(outputPath, scanField, "mask", "all", "debug", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.png")
                         utils.drawImgFromPoints(fn, fScan, [], [], fAnnotations, [], dilation=None)
 
@@ -415,6 +444,7 @@ if __name__ == "__main__":
                 gtBags.append(fn)
 
     for scanField in laserPointsFields:
+        os.makedirs(os.path.join(outputPath, scanField, "moving"), exist_ok=True)
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "imgs"), exist_ok=True)
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "annotations"), exist_ok=True)
         os.makedirs(os.path.join(outputPath, scanField, "mask", "all", "debug"), exist_ok=True)

@@ -38,12 +38,16 @@ Optionally add the feature transform flag --feature_transform
 Train unet using python trian_unet.py
 Optional flags --num_channels 3 (1/2/3) --lanoise and --numc 2 (2/3)
 
+# Train the networks
+The MaskRCNN network can be trained by running networks/maskrcnn/training.py
+Alternatively, you can run the files in network/ to train the other networks.
+
+
 
 ## Evaluation 
 
 For pointnet use networkEval.py
 Make sure the feature transform flag is set correctly.
+For each network, go into the folder and run the associated evaluation script.
+To generate the graphs, run the scripts in the evaluation folder.
 
-# Train the networks
-The MaskRCNN network can be trained by running networks/maskrcnn/training.py
-The networks can be trained by running networks/

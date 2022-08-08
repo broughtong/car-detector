@@ -583,10 +583,13 @@ if __name__ == '__main__':
     mdn2_intensity._make_predict_function()
 
     #os.makedirs(outputPath, exist_ok=True)
+    import time
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if filename[-7:] == ".pickle":
                 path = datasetPath
                 folder = files[0][len(path):]
+                start_time = time.clock()
                 processBag(path, folder, filename)
+                print(time.clock() - start_time, "seconds")
 
