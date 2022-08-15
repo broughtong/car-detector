@@ -40,7 +40,7 @@ class Extractor(multiprocessing.Process):
         #self.pointcloudfile = open(fn, 'w', buffering=1)
 
         self.lastX, self.lastY = None, None
-        self.distThresh = 0.5
+        self.distThresh = 0.1
         self.fileCounter = 0
         self.position = None
         self.scans = []
@@ -267,8 +267,16 @@ class Extractor(multiprocessing.Process):
         ones = np.ones((gen.shape[0], 1))
         gen = np.concatenate((gen, ones), axis=1)
 
-        out = np.matmul(gen, mat)
-        out = out[:, :3]
+        #out = np.matmul(gen, mat)
+        #out = out[:, :3]
+
+        #gen = list(pc2.read_points(msg, skip_nans=True))
+        out = []
+        for idx, point in enumerate(gen):
+            point = np.matmul(mat, point)
+            point = point[:3]
+            out.append(point)
+        out = np.array(out) 
 
         #for idx, point in enumerate(gen):
         #    point = np.matmul(mat, point)

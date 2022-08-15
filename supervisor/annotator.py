@@ -288,25 +288,22 @@ class Annotator(multiprocessing.Process):
 
     def saveAnnotations(self, filename, scan, annotations, cloud):
 
+        print(filename, annotations)
+
         carPoints = []
         nonCarPoints = []
 
         for _ in annotations:
             carPoints.append([])
 
-        idxUsed = []
         for idx, point in enumerate(cloud):
             inAnnotation = False
             for annoIdx, annotation in enumerate(annotations):
                 if self.isInsideAnnotation([point[0], point[1]], annotation):
                     inAnnotation=True
-                    idxUsed.append(idx)
                     carPoints[annoIdx].append(point[:3])
-
-        idxUsed = set(idxUsed)
-        for i in range(len(scan)):
-            if i not in idxUsed:
-                nonCarPoints.append(cloud[i])
+            if inAnnotation == False:
+                nonCarPoints.append(point[:3])
 
         header = """ply
 format ascii 1.0
@@ -321,17 +318,21 @@ end_header
 """
 
         someCols = [[255, 0, 0], [255, 255, 0], [255, 255, 255], [0, 255, 0], [0, 0, 255], [0, 255, 255]]
+
         with open(filename, "w") as f:
-            nPoints = len(nonCarPoints)
+            nPoints = 0#len(nonCarPoints)
             for car in carPoints:
                 nPoints += len(car)
             f.write(header % (nPoints))
             for p in nonCarPoints:
-                f.write("%f %f %f %i %i %i\n" % (p[0], p[1], p[2], 0, 0, 0))
+                #if p[0] == 0 and p[1] == 0 and p[2] == 0:
+                #    continue
+                #f.write("%f %f %f %i %i %i\n" % (p[0], p[1], p[2], 0, 0, 255))
+                pass
             for idx, car in enumerate(carPoints):
                 for p in car:
-                    if p[0] == 0 and p[1] == 0 and p[2] == 0:
-                        continue
+                    #if p[0] == 0 and p[1] == 0 and p[2] == 0:
+                    #    continue
                     col = someCols[idx]
                     f.write("%f %f %f %i %i %i\n" % (p[0], p[1], p[2], col[0], col[1], col[2]))
 
@@ -450,7 +451,6 @@ end_header
                         self.saveCloud(fn, newScan)
                         fn = os.path.join(outputPath, scanField, "pointcloud", "all", "annotations", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + "-V.")
                         #self.saveAnnotations(fn, newScan, newAnnotations)
-            break
 
 if __name__ == "__main__":
 
