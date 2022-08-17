@@ -19,7 +19,7 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 extractEveryFrame = False
-datasetPath = "../../skoda-collection/rosbags/"
+datasetPath = "../data/rosbags/"
 outputPath = "../data/extracted/"
 lp = lg.LaserProjection()
 
@@ -36,8 +36,6 @@ class Extractor(multiprocessing.Process):
         self.path = path
         self.folder = folder
         self.filename = filename
-        #fn = os.path.join(outputPath, self.folder, self.filename + ".3d.txt")
-        #self.pointcloudfile = open(fn, 'w', buffering=1)
 
         self.lastX, self.lastY = None, None
         self.distThresh = 0.1
@@ -56,6 +54,7 @@ class Extractor(multiprocessing.Process):
         self.topicBuf = []
         for _ in range(len(self.scanTopics)-1):
             self.topicBuf.append(None)
+
         self.pointcloudScanTopic = ["/os_cloud_node/points"]
         self.pointcloudScanBuf = None
         self.pointclouds = []
@@ -263,9 +262,10 @@ class Extractor(multiprocessing.Process):
 
         gen = list(pc2.read_points(msg, skip_nans=True))
         gen = np.array(gen)
-        gen = gen[:, :3]
-        ones = np.ones((gen.shape[0], 1))
-        gen = np.concatenate((gen, ones), axis=1)
+        gen = np.delete(gen, 8, 1)
+        gen = np.delete(gen, 7, 1)
+        gen = np.delete(gen, 5, 1)
+        gen = np.delete(gen, 4, 1)
 
         #out = np.matmul(gen, mat)
         #out = out[:, :3]
@@ -273,8 +273,17 @@ class Extractor(multiprocessing.Process):
         #gen = list(pc2.read_points(msg, skip_nans=True))
         out = []
         for idx, point in enumerate(gen):
+            intensity = point[3]
+            channel = point[4]
+            point = [*point[:3], 1]
             point = np.matmul(mat, point)
-            point = point[:3]
+            point = [*point[:3]]
+            #print((point[0]**2 + point[1]**2)**0.5, point[0], point[1])
+            if (point[0]**2 + point[1]**2)**0.5 < 2.5:
+                continue
+            point.append(intensity)
+            point.append(channel)
+            point = np.array(point)
             out.append(point)
         out = np.array(out) 
 
@@ -293,7 +302,7 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 jobs.append(Extractor(path, folder, filename))
-    maxCores = 7
+    maxCores = 4
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)
