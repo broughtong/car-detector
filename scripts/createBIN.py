@@ -2,6 +2,7 @@ import utils
 import multiprocessing
 import pickle
 import os
+import numpy as np
 
 datasetPath = "../data/temporal"
 outPath = "../data/kitti-bin"
@@ -26,18 +27,18 @@ class Viz(multiprocessing.Process):
         os.makedirs(os.path.join(outPath, self.folder), exist_ok=True)
         for frameIdx in range(len(data[field])):
             outfilename = os.path.join(outPath, self.folder, "%s-%i.ply" % (self.filename, frameIdx))
-            data = data[field][frameIdx]
+            frame = data[field][frameIdx]
 
             #x, y, z, intensity, t, reflectivity, ring, ambient, range 
             #bin is x, y, z, reflect
-            data = np.delete(data, 8, 1)
-            data = np.delete(data, 7, 1)
-            data = np.delete(data, 6, 1)
-            data = np.delete(data, 4, 1)
-            data = np.delete(data, 3, 1)
+            frame = np.delete(frame, 8, 1)
+            frame = np.delete(frame, 7, 1)
+            frame = np.delete(frame, 6, 1)
+            frame = np.delete(frame, 4, 1)
+            frame = np.delete(frame, 3, 1)
 
-            data = data.astype('float32')
-            data.tofile(outfilename)
+            frame = frame.astype('float32')
+            frame.tofile(outfilename)
 
 if __name__ == "__main__":
 
