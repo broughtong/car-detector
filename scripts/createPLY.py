@@ -3,9 +3,9 @@ import multiprocessing
 import pickle
 import os
 
-datasetPath = "../data/temporal"
-outPath = "../visualisation/preprocessed-plys"
-field = "pointclouds"
+datasetPath = "../data/snow"
+outPath = "../visualisation/preprocessed-plys-fog"
+field = "snow"
 
 class Viz(multiprocessing.Process):
     def __init__(self, path, folder, filename):

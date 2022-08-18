@@ -63,7 +63,7 @@ class Detector(multiprocessing.Process):
         fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
         with open(fn, "wb") as f:
             print("Writing to ", fn)
-            pickle.dump(self.data, f, protocol=2)
+            pickle.dump(self.data, f)
 
         print("Process finished for file %s" % (self.filename))
 
