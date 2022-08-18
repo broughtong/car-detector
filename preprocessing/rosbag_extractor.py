@@ -211,7 +211,7 @@ class Extractor(multiprocessing.Process):
                     print("Topic missing: ", self.scanTopics[idx])
             return
         if self.pointcloudScanBuf is None:
-            print("Unable to grab 3d scan")
+            print("Unable to grab 3d scan", self.filename)
             return
 
         msgs = copy.deepcopy(self.topicBuf)
@@ -262,35 +262,19 @@ class Extractor(multiprocessing.Process):
 
         gen = list(pc2.read_points(msg, skip_nans=True))
         gen = np.array(gen)
-        gen = np.delete(gen, 8, 1)
-        gen = np.delete(gen, 7, 1)
-        gen = np.delete(gen, 5, 1)
-        gen = np.delete(gen, 4, 1)
 
-        #out = np.matmul(gen, mat)
-        #out = out[:, :3]
-
-        #gen = list(pc2.read_points(msg, skip_nans=True))
         out = []
         for idx, point in enumerate(gen):
-            intensity = point[3]
-            channel = point[4]
-            point = [*point[:3], 1]
-            point = np.matmul(mat, point)
-            point = [*point[:3]]
-            #print((point[0]**2 + point[1]**2)**0.5, point[0], point[1])
+            #x, y, z, intensity, t, reflectivity, ring, ambient, range
+            transPoint = [*point[:3], 1]
+            transPoint = np.matmul(mat, transPoint)
+            point = [*transPoint[:3], *point[3:]]
             if (point[0]**2 + point[1]**2)**0.5 < 2.5:
                 continue
-            point.append(intensity)
-            point.append(channel)
             point = np.array(point)
             out.append(point)
         out = np.array(out) 
 
-        #for idx, point in enumerate(gen):
-        #    point = np.matmul(mat, point)
-        #    point = point[:3]
-        #    out[idx] = point
         return out
 
 if __name__ == "__main__":
@@ -302,7 +286,7 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 jobs.append(Extractor(path, folder, filename))
-    maxCores = 4
+    maxCores = 7
     limit = maxCores
     batch = maxCores 
     print("Spawned %i processes" % (len(jobs)), flush = True)

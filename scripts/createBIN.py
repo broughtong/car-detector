@@ -4,7 +4,7 @@ import pickle
 import os
 
 datasetPath = "../data/temporal"
-outPath = "../visualisation/preprocessed-plys"
+outPath = "../data/kitti-bin"
 field = "pointclouds"
 
 class Viz(multiprocessing.Process):
@@ -26,7 +26,18 @@ class Viz(multiprocessing.Process):
         os.makedirs(os.path.join(outPath, self.folder), exist_ok=True)
         for frameIdx in range(len(data[field])):
             outfilename = os.path.join(outPath, self.folder, "%s-%i.ply" % (self.filename, frameIdx))
-            utils.drawPLY(outfilename, data[field][frameIdx])
+            data = data[field][frameIdx]
+
+            #x, y, z, intensity, t, reflectivity, ring, ambient, range 
+            #bin is x, y, z, reflect
+            data = np.delete(data, 8, 1)
+            data = np.delete(data, 7, 1)
+            data = np.delete(data, 6, 1)
+            data = np.delete(data, 4, 1)
+            data = np.delete(data, 3, 1)
+
+            data = data.astype('float32')
+            data.tofile(outfilename)
 
 if __name__ == "__main__":
 
