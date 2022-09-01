@@ -1,16 +1,23 @@
 import os
+import shutil
 
 def divide(testingSplit, datasetPath, gtPath):
 
-    os.makedirs(os.path.join(datasetPath, "training", "imgs"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "training", "annotations"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "training", "debug"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "testing", "imgs"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "testing", "annotations"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "testing", "debug"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "evaluation", "imgs"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "evaluation", "annotations"), exist_ok=True)
-    os.makedirs(os.path.join(datasetPath, "evaluation", "debug"), exist_ok=True)
+    subfolders = []
+    for files in os.walk(datasetPath):
+        if files[0][-4:] == "/all":
+            subfolders = files[1]
+
+    for subfolder in subfolders:
+        try:
+            shutil.rmtree(os.path.join(datasetPath, "training", subfolder))
+            shutil.rmtree(os.path.join(datasetPath, "testing", subfolder))
+            shutil.rmtree(os.path.join(datasetPath, "evaluation", subfolder))
+        except:
+            pass
+        os.makedirs(os.path.join(datasetPath, "training", subfolder), exist_ok=True)
+        os.makedirs(os.path.join(datasetPath, "testing", subfolder), exist_ok=True)
+        os.makedirs(os.path.join(datasetPath, "evaluation", subfolder), exist_ok=True)
 
     #get list of rosbags with gt
     evalBags = []
@@ -25,10 +32,10 @@ def divide(testingSplit, datasetPath, gtPath):
 
     #get list of rosbags
     bags = []
-    for files in os.walk(os.path.join(datasetPath, "all", "imgs")):
+    for files in os.walk(os.path.join(datasetPath, "all", subfolders[0])):
         filenames = sorted(files[2]) #replicate split
         for fn in filenames:
-            bag = fn.split(".pickle")[0]
+            bag = fn.split(".")[0]
             if bag not in evalBags:
                 if bag not in bags:
                     bags.append(bag)
@@ -49,55 +56,33 @@ def divide(testingSplit, datasetPath, gtPath):
     print(evalBags)
     print("Creating symlinks...")
 
-    for files in os.walk(os.path.join(datasetPath, "all", "imgs")):
-        for filename in files[2]:
-            bag = filename.split(".pickle")[0]
-            if bag in trainingBags:
-                src = os.path.join("../../", "all", "imgs", filename)
-                dst = os.path.join(datasetPath, "training", "imgs", filename)
-                os.symlink(src, dst)
-            elif bag in testingBags:
-                src = os.path.join("../../", "all", "imgs", filename)
-                dst = os.path.join(datasetPath, "testing", "imgs", filename)
-                os.symlink(src, dst)
-            elif bag in evalBags:
-                src = os.path.join("../../", "all", "imgs", filename)
-                dst = os.path.join(datasetPath, "evaluation", "imgs", filename)
-                os.symlink(src, dst)
-
-    for files in os.walk(os.path.join(datasetPath, "all", "annotations")):
-        for filename in files[2]:
-            bag = filename.split(".pickle")[0]
-            if bag in trainingBags:
-                src = os.path.join("../../", "all", "annotations", filename)
-                dst = os.path.join(datasetPath, "training", "annotations", filename)
-                os.symlink(src, dst)
-            elif bag in testingBags:
-                src = os.path.join("../../", "all", "annotations", filename)
-                dst = os.path.join(datasetPath, "testing", "annotations", filename)
-                os.symlink(src, dst)
-            elif bag in evalBags:
-                src = os.path.join("../../", "all", "annotations", filename)
-                dst = os.path.join(datasetPath, "evaluation", "annotations", filename)
-                os.symlink(src, dst)
-
-    for files in os.walk(os.path.join(datasetPath, "all", "debug")):
-        for filename in files[2]:
-            bag = filename.split(".pickle")[0]
-            if bag in trainingBags:
-                src = os.path.join("../../", "all", "debug", filename)
-                dst = os.path.join(datasetPath, "training", "debug", filename)
-                os.symlink(src, dst)
-            elif bag in testingBags:
-                src = os.path.join("../../", "all", "debug", filename)
-                dst = os.path.join(datasetPath, "testing", "debug", filename)
-                os.symlink(src, dst)
-            elif bag in evalBags:
-                src = os.path.join("../../", "all", "debug", filename)
-                dst = os.path.join(datasetPath, "evaluation", "debug", filename)
-                os.symlink(src, dst)
+    dryRun = False
+    for subfolder in subfolders:
+        for files in os.walk(os.path.join(datasetPath, "all", subfolder)):
+            for filename in files[2]:
+                bag = filename.split(".")[0]
+                if bag in trainingBags:
+                    src = os.path.join("../../", "all", subfolder, filename)
+                    dst = os.path.join(datasetPath, "training", subfolder, filename)
+                    if dryRun == False:
+                        os.symlink(src, dst)
+                elif bag in testingBags:
+                    src = os.path.join("../../", "all", subfolder, filename)
+                    dst = os.path.join(datasetPath, "testing", subfolder, filename)
+                    if dryRun == False:
+                        os.symlink(src, dst)
+                elif bag in evalBags:
+                    src = os.path.join("../../", "all", subfolder, filename)
+                    dst = os.path.join(datasetPath, "evaluation", subfolder, filename)
+                    if dryRun == False:
+                        os.symlink(src, dst)
 
 if __name__ == "__main__":
 
-    divide(testingSplit=6, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
-    divide(testingSplit=6, datasetPath="../annotations/scans/mask", gtPath="../data/gt")
+    #divide(testingSplit=6, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
+    #divide(testingSplit=6, datasetPath="../annotations/scans/mask", gtPath="../data/gt")
+    #divide(testingSplit=8, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/scans/maskrcnn", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-ply", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-npy", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-bin", gtPath="../data/gt")
