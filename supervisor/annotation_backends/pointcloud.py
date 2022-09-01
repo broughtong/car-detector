@@ -27,10 +27,26 @@ class Annotator():
         fn = os.path.join(self.path, fieldname, "pointcloud-ply", "all", "cloud", filename + ".ply")
         self.saveCloudPLY(fn, pc)
 
-        #masks
-        #fn = os.path.join(self.path, field, "maskrcnn", "all", "masks", filename + ".png")
+        #annotations
+        fn = os.path.join(self.path, fieldname, "pointcloud-bin", "all", "annotations", filename + ".txt")
+        self.generateAnnotations(fn, annotations)
+        fn = os.path.join(self.path, fieldname, "pointcloud-npy", "all", "annotations", filename + ".txt")
+        self.generateAnnotations(fn, annotations)
+        fn = os.path.join(self.path, fieldname, "pointcloud-ply", "all", "annotations", filename + ".txt")
+        self.generateAnnotations(fn, annotations)
         #carPoints, nonCarPoints = utils.getInAnnotation(newScan, newAnnotations)
         #badAnnotation = utils.drawAnnotation(fn, frame, newAnnotations)
+
+    def generateAnnotations(self, fn, annotations):
+
+        with open(fn, "w") as f:
+            f.write("# format: [x y z dx dy dz heading_angle category_name]\n")
+            dx = 5.12
+            dy = 1.85 
+            dz = 4.13
+            className = "Vehicle"
+            for a in annotations:
+                f.write("%f %f %f %f %f %f %f %s\n" % (a[0], a[1], 0, dx, dy, dz, a[2], className))
 
     def saveCloudBIN(self, fn, pc):
         

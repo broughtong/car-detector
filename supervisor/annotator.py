@@ -139,7 +139,7 @@ class Annotator(multiprocessing.Process):
 
                         for method in methods:
                             filename = self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation)
-                            method.annotate(filename, newScan, newAnnotations, scanField)
+                            method.annotate(filename, cloud, newAnnotations, scanField)
 
                         continue
                         fn = os.path.join(outputPath, scanField, "mask", "all", "imgs", self.filename + "-" + str(frame) + "-" + '{0:.2f}'.format(rotation) + ".png")
@@ -205,10 +205,9 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 jobs.append(Annotator(path, folder, filename))
-                break
 
     print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 1
+    cpuCores = 12
     limit = cpuCores
     batch = cpuCores
     for i in range(len(jobs)):
