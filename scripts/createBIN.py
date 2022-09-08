@@ -26,7 +26,7 @@ class Viz(multiprocessing.Process):
 
         os.makedirs(os.path.join(outPath, self.folder), exist_ok=True)
         for frameIdx in range(len(data[field])):
-            outfilename = os.path.join(outPath, self.folder, "%s-%i.ply" % (self.filename, frameIdx))
+            outfilename = os.path.join(outPath, self.folder, "%s-%i.npy" % (self.filename, frameIdx))
             frame = data[field][frameIdx]
 
             #x, y, z, intensity, t, reflectivity, ring, ambient, range 
@@ -38,7 +38,9 @@ class Viz(multiprocessing.Process):
             frame = np.delete(frame, 3, 1)
 
             frame = frame.astype('float32')
-            frame.tofile(outfilename)
+            #print(outfilename, frame.shape, frame.type)
+            #frame.tofile(outfilename)
+            np.save(outfilename, frame)
 
 if __name__ == "__main__":
 
@@ -48,6 +50,8 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".3d.pickle" in filename:
+                if "2022-06-21-20-45-50" not in filename:
+                    continue
                 path = datasetPath
                 folder = files[0][len(path)+1:]
                 jobs.append(Viz(path, folder, filename))

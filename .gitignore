@@ -1,4 +1,5 @@
 data/
+annotations/
 *.bin
 *.npy
 *.swp

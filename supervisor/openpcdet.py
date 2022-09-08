@@ -1,8 +1,12 @@
 import os
-
+import shutil
 
 def run(datasetPath):
 
+    try:
+        shutil.rmtree(os.path.join(datasetPath, "openpcdet"))
+    except:
+        pass
     os.makedirs(os.path.join(datasetPath, "openpcdet"), exist_ok=True)
     os.makedirs(os.path.join(datasetPath, "openpcdet", "ImageSets"), exist_ok=True)
     os.makedirs(os.path.join(datasetPath, "openpcdet", "points"), exist_ok=True)

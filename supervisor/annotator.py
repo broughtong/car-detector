@@ -17,6 +17,7 @@ from scipy.spatial.transform import Rotation as R
 
 from annotation_backends import maskrcnn, pointcloud
 methods = [maskrcnn, pointcloud]
+methods = [pointcloud]
 
 datasetPath = "../data/temporal/"
 annotationSource = "extrapolated"
