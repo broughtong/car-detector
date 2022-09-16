@@ -9,8 +9,9 @@ import cv2
 import sys
 import os
 import rosbag
-import multiprocessing
 import time
+import concurrent
+import tqdm
 from os import devnull
 from sklearn.cluster import DBSCAN
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -29,9 +30,8 @@ def suppress_stdout_stderr():
         with redirect_stderr(fnull) as err, redirect_stdout(fnull) as out:
             yield (err, out)
 
-class Temporal(multiprocessing.Process):
+class Temporal():
     def __init__(self, path, folder, filename, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired):
-        multiprocessing.Process.__init__(self)
 
         self.path = path
         self.folder = folder
@@ -43,10 +43,11 @@ class Temporal(multiprocessing.Process):
         self.extrapolateRequired = extrapolateRequired
         self.underRobotDistance = 1.8
         self.data = {}
+        self.outputPath = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
 
     def run(self):
 
-        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush=True)
+        #print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush=True)
 
         foldername = os.path.join(outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
         if os.path.isfile(os.path.join(foldername, self.filename + ".data.pickle")):
@@ -56,16 +57,16 @@ class Temporal(multiprocessing.Process):
                 pass
 
         basefn = os.path.join(self.path, self.folder, self.filename)
-        os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
-        shutil.copy(basefn + ".scans.pickle", os.path.join(outputPath, self.folder))
-        shutil.copy(basefn + ".3d.pickle", os.path.join(outputPath, self.folder))
+        os.makedirs(os.path.join(self.outputPath, self.folder), exist_ok=True)
+        shutil.copy(basefn + ".scans.pickle", os.path.join(self.outputPath, self.folder))
+        shutil.copy(basefn + ".3d.pickle", os.path.join(self.outputPath, self.folder))
 
         with open(basefn + ".data.pickle", "rb") as f:
             self.data.update(pickle.load(f))
 
         self.temporal()
         
-        fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
+        fn = os.path.join(self.outputPath, self.folder, self.filename + ".data.pickle")
         with open(fn, "wb") as f:
             pickle.dump(self.data, f)
 
@@ -454,7 +455,7 @@ class Temporal(multiprocessing.Process):
         return a + i * (b - a)
 
 if __name__ == "__main__":
-    
+
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
@@ -462,18 +463,22 @@ if __name__ == "__main__":
                 path = datasetPath
                 folder = files[0][len(path):]
                 jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 50, 10))
+                #jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 75, 10))
+                #jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 100, 10))
+                #jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 50, 15))
+                #jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 80, 20))
+                #jobs.append(Temporal(path, folder, filename, 0.8, 50, 5, 150, 30))
+                #jobs.append(Temporal(path, folder, filename, 0.5, 50, 5, 150, 30))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
-    print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 7
-    limit = cpuCores
-    batch = cpuCores
-    for i in range(len(jobs)):
-        if i < limit:
-            jobs[i].start()
-        else:
-            for j in range(limit):
-                jobs[j].join()
-            limit += batch
-            jobs[i].start()
+    workers = 8
+    print("Starting %i jobs with %i workers" % (len(jobs), workers))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as e:
+        with tqdm.tqdm(total=len(jobs)) as p:
+            fs = []
+            for i in range(len(jobs)):
+                f = e.submit(jobs[i].run)
+                fs.append(f)
+            for f in concurrent.futures.as_completed(fs):
+                p.update()
 
