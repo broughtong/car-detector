@@ -3,14 +3,15 @@ import copy
 import rospy
 import pickle
 import math
-import cv2
 import sys
 import os
 import rosbag
-import multiprocessing
 import time
+import concurrent
+import concurrent.futures
+import multiprocessing
+import tqdm
 from os import devnull
-from sklearn.cluster import DBSCAN
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from tf_bag import BagTfTransformer
 import laser_geometry.laser_geometry as lg
@@ -19,7 +20,7 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 extractEveryFrame = False
-datasetPath = "../data/rosbags/"
+datasetPath = "../data/rosbags_filtered/"
 outputPath = "../data/extracted/"
 lp = lg.LaserProjection()
 
@@ -29,16 +30,16 @@ def suppress_stdout_stderr():
         with redirect_stderr(fnull) as err, redirect_stdout(fnull) as out:
             yield (err, out)
 
-class Extractor(multiprocessing.Process):
-    def __init__(self, path, folder, filename):
-        multiprocessing.Process.__init__(self)
+class Extractor():
+    def __init__(self, path, folder, filename, queue):
 
         self.path = path
         self.folder = folder
         self.filename = filename
+        self.queue = queue
 
         self.lastX, self.lastY = None, None
-        self.distThresh = 0.1
+        self.distThresh = 0.05
         self.fileCounter = 0
         self.position = None
         self.scans = []
@@ -61,16 +62,15 @@ class Extractor(multiprocessing.Process):
 
     def run(self):
         
-        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)), flush = True)
+        self.queue.put("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
 
-        print("Reading tfs", flush = True)
         try:
             with suppress_stdout_stderr():
                 self.bagtf = BagTfTransformer(os.path.join(self.path, self.folder, self.filename))
         except:
-            print("Process finished, bag failed for file %s" % (self.filename), flush = True)
-            return
-        print("Reading bag", flush = True)
+            self.queue.put("Process finished, bag failed for file %s (tf)" % (self.filename))
+            return 0
+
         for topic, msg, t in rosbag.Bag(os.path.join(self.path, self.folder, self.filename)).read_messages():
             if topic in self.pointcloudScanTopic:
                 self.pointcloudScanBuf = msg
@@ -84,8 +84,10 @@ class Extractor(multiprocessing.Process):
             if topic == "/odom":
                 self.position = msg.pose.pose.position
                 self.orientation = msg.pose.pose.orientation
+
         self.saveScans()
-        print("Process finished for file %s, %i frames" % (self.filename, self.fileCounter), flush = True)
+        self.queue.put(1)
+        return len(self.scans)
 
     def odometryMoved(self):
 
@@ -112,8 +114,9 @@ class Extractor(multiprocessing.Process):
         for msg in msgs:
             points[msg.header.frame_id] = []
             if t - msg.header.stamp > rospy.Duration(1, 0):
-                print("Old Scan present", flush = True)
+                #self.queue.put("Old Scan present", flush = True) #for finding weird rosbags
                 return [], [], []
+
         for idx in range(len(msgs)):
             msgs[idx] = lp.projectLaser(msgs[idx])
             msg = pc2.read_points(msgs[idx])
@@ -124,7 +127,7 @@ class Extractor(multiprocessing.Process):
                 with suppress_stdout_stderr():
                     translation, quaternion = self.bagtf.lookupTransform("base_link", msgs[idx].header.frame_id, msgs[idx].header.stamp)
             except:
-                print("Error finding tf", flush = True)
+                self.queue.put("Error finding tf (1) %s" % (self.filename))
                 return [], [], []
             r = R.from_quat(quaternion)
             mat = r.as_matrix()
@@ -146,7 +149,7 @@ class Extractor(multiprocessing.Process):
             with suppress_stdout_stderr():
                 translation, quaternion = self.bagtf.lookupTransform("odom", "base_link", msgs[0].header.stamp)
         except:
-            print("Error finding tf here", flush = True)
+            self.queue.put("Error finding tf (2) %s" % (self.filename))
             return [], [], []
         r = R.from_quat(quaternion)
         mat = r.as_matrix()
@@ -182,21 +185,21 @@ class Extractor(multiprocessing.Process):
     def saveScans(self):
 
         if len(self.scans) == 0:
-            print("Skipping saving empty bag")
+            self.queue.put("Skipping saving empty bag %s" % (self.filename))
             return
 
         os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
 
         fn = os.path.join(outputPath, self.folder, self.filename + ".scans.pickle")
-        print("Writing %s" % (fn))
+        #print("Writing %s" % (fn))
         with open(fn, "wb") as f:
             pickle.dump({"scans": self.scans}, f)
         fn = os.path.join(outputPath, self.folder, self.filename + ".3d.pickle")
-        print("Writing %s" % (fn))
+        #print("Writing %s" % (fn))
         with open(fn, "wb") as f:
             pickle.dump({"pointclouds": self.pointclouds}, f)
         fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
-        print("Writing %s" % (fn))
+        #print("Writing %s" % (fn))
         with open(fn, "wb") as f:
             pickle.dump({"trans": self.trans, "ts": self.ts}, f)
 
@@ -205,13 +208,15 @@ class Extractor(multiprocessing.Process):
         t = rospy.Time(t.secs, t.nsecs)
 
         if None in self.topicBuf:
-            print("None in topic buf!")
+            #self.queue.put("None in topic buf!")
             for idx in range(len(self.topicBuf)):
                 if self.topicBuf[idx] is None:
-                    print("Topic missing: ", self.scanTopics[idx])
+                    #self.queue.put("Topic missing: ", self.scanTopics[idx])
+                    pass
             return
+
         if self.pointcloudScanBuf is None:
-            print("Unable to grab 3d scan", self.filename)
+            self.queue.put("Unable to grab a 3d scan frame from %s" % (self.filename))
             return
 
         msgs = copy.deepcopy(self.topicBuf)
@@ -249,7 +254,7 @@ class Extractor(multiprocessing.Process):
             with suppress_stdout_stderr():
                 translation, quaternion = self.bagtf.lookupTransform("base_link", msg.header.frame_id, msg.header.stamp)
         except:
-            print("Error finding tf", flush = True)
+            self.queue.put("Error finding tf (3) %s" % (self.filename))
             return [], [], []
 
         r = R.from_quat(quaternion)
@@ -277,7 +282,18 @@ class Extractor(multiprocessing.Process):
 
         return out
 
+def listener(q, total):
+    pbar = tqdm.tqdm(total=total)
+    for item in iter(q.get, None):
+        if type(item) == int:
+            pbar.update()
+        else:
+            tqdm.tqdm.write(str(item))
+
 if __name__ == "__main__":
+    
+    manager = multiprocessing.Manager()
+    queue = manager.Queue()
 
     jobs = []
     for files in os.walk(datasetPath):
@@ -285,18 +301,34 @@ if __name__ == "__main__":
             if filename[-4:] == ".bag":
                 path = datasetPath
                 folder = files[0][len(path):]
-                jobs.append(Extractor(path, folder, filename))
-    maxCores = 7
-    limit = maxCores
-    batch = maxCores 
-    print("Spawned %i processes" % (len(jobs)), flush = True)
-    for i in range(len(jobs)):
-        if i < limit:
-            jobs[i].start()
-            time.sleep(0.2)
-        else:
-            for j in range(limit):
-                jobs[j].join()
-            limit += batch
-            jobs[i].start()
+                jobs.append(Extractor(path, folder, filename, queue))
+    
+    listenProcess = multiprocessing.Process(target=listener, args=(queue, len(jobs)))
+    listenProcess.start()
 
+    workers = 2
+    futures = []
+    queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
+        for job in jobs:
+            f = ex.submit(job.run)
+            futures.append(f)
+
+        for future in futures:
+            try:
+                pass
+                #queue.put(str(future.result()))
+            except Exception as e:
+                queue.put("P Exception: " + str(e))
+
+    results = []
+    for i, job in enumerate(jobs):
+        f = futures[i]
+        value = [job.path, job.folder, job.filename, f.result()]
+        results.append(value)
+
+    with open(os.path.join(outputPath, "statistics.pkl"), "wb") as f:
+        pickle.dump(results, f)
+    
+    queue.put(None)
+    listenProcess.join()
