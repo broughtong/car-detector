@@ -1,13 +1,13 @@
 #!/usr/bin/python
+import multiprocessing
 import shutil
-import rospy
 import pickle
 import math
-import cv2
 import sys
 import os
-import multiprocessing
 import utils
+import tqdm
+import concurrent
 import numpy as np
 from sklearn.cluster import DBSCAN
 
@@ -18,15 +18,18 @@ WIDTH = 1.5
 LENGTH = 2.5
 DIAGONAL = 3.1
 DIVISION_FACTOR = 5
-THRESHOLD = 0.3
+THRESHOLD = 0.12
+useOld = False
+if useOld:
+    THRESHOLD=0.3
 
 def euclidean_distance(x_1, x_2, y_1, y_2):
     return math.sqrt((x_1-x_2)*(x_1-x_2)+(y_1-y_2)*(y_1-y_2))
 
-class Detector(multiprocessing.Process):
-    def __init__(self, path, folder, filename):
-        multiprocessing.Process.__init__(self)
+class Detector():
+    def __init__(self, path, folder, filename, queue):
 
+        self.queue = queue
         self.path = path
         self.folder = folder
         self.filename = filename[:-12]
@@ -34,15 +37,19 @@ class Detector(multiprocessing.Process):
         self.detections = []
         self.relaxed = []
         self.data = {}
+        self.maxPointsInInner = 5
 
     def run(self):
         
-        print("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
+        self.queue.put("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
 
         basefn = os.path.join(self.path, self.folder, self.filename)
         os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
         shutil.copy(basefn + ".scans.pickle", os.path.join(outputPath, self.folder))
-        shutil.copy(basefn + ".3d.pickle", os.path.join(outputPath, self.folder))
+        try:
+            shutil.copy(basefn + ".3d.pickle", os.path.join(outputPath, self.folder))
+        except:
+            pass
 
         with open(basefn + ".data.pickle", "rb") as f:
             self.data.update(pickle.load(f))
@@ -57,43 +64,444 @@ class Detector(multiprocessing.Process):
             cars = self.processScan(scan, method="strict")
             self.detections.append(cars)
             self.fileCounter += 1
+            self.queue.put(1)
         
         self.data["annotations"] = self.detections
         del self.data["scans"]
         fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
         with open(fn, "wb") as f:
-            print("Writing to ", fn)
             pickle.dump(self.data, f)
-
-        print("Process finished for file %s" % (self.filename))
 
     def processScan(self, scan, method="strict"):
 
         #only uses 3 scans!
-        # points = np.concatenate([scan["sick_back_left"], scan["sick_back_right"], scan["sick_front"]])
-        # cars = self.detectCarGeometry(points)
 
-        points = utils.combineScans({"sick_back_left": scan["sick_back_left"], "sick_back_right": scan["sick_back_right"]})
-        middle_points = np.array(scan["sick_back_middle"])
+        if useOld:
+            points = utils.combineScans({"sick_back_left": scan["sick_back_left"], "sick_back_right": scan["sick_back_right"]})
+            middle_points = np.array(scan["sick_back_middle"])
 
-        if len(middle_points) == 0 or len(points) == 0:
-            return []
+            if len(middle_points) == 0 or len(points) == 0:
+                return []
 
-        if method == "strict":
-            cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
-        elif method == "relaxed":
-            cars = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
+            if method == "strict":
+                cars = self.detect_car_geometric(points, middle_points, min_wheels=4, splitting=True, use_bumper=False)
+            elif method == "relaxed":
+                cars = self.detect_car_geometric(points, middle_points, min_wheels=3, splitting=True, use_bumper=False)
 
-        wheels = []
-        colours = []
-        for i in cars:
-            wheels.append([i[0], i[1]])
-            colours.append([0, 255, 255])
-    
-        fn = os.path.join(visualisationPath, "car-estimates")
-        os.makedirs(fn, exist_ok=True)
-        fn = os.path.join(fn, self.filename + "-" + str(self.fileCounter) + ".png")
-        utils.drawImgFromPoints(fn, points, wheels, colours, cars=cars)
+            wheels = []
+            colours = []
+            for i in cars:
+                wheels.append([i[0], i[1]])
+                colours.append([0, 255, 255])
+        
+            fn = os.path.join(visualisationPath, "car-estimates")
+            os.makedirs(fn, exist_ok=True)
+            fn = os.path.join(fn, self.filename + "-" + str(self.fileCounter) + ".png")
+            utils.drawImgFromPoints(fn, points, wheels, colours, cars=cars)
+
+            return cars
+
+        else:
+            full = utils.combineScans(scan)
+            p = utils.combineScans({"sick_back_left": scan["sick_back_left"], "sick_back_right": scan["sick_back_right"]})
+            #p = utils.combineScans({"sick_back_left": scan["sick_back_left"], "sick_back_right": scan["sick_back_right"], "sick_front": scan["sick_front"],})
+            #p = utils.combineScans({"sick_back_left": scan["sick_back_left"], "sick_back_right": scan["sick_back_right"], "sick_back_low": scan["sick_back_low"], "sick_back_middle": scan["sick_back_middle"]})
+            cars = self.detect(p, full)
+            return cars
+
+    def detect(self, points, scan):
+
+        dbscan = DBSCAN(eps=0.25, min_samples=4)
+        clusterer = dbscan.fit_predict(points[:, :2])
+
+        nClusters = np.unique(clusterer)
+        nClusters = len(nClusters[nClusters != -1])
+
+        centres = np.empty((0, 2))
+        for i in range(nClusters):
+            cluster = points[np.nonzero(clusterer == i)]
+            centre = np.mean(cluster, axis=0)
+            #if centre[0] >0 or centre[1] < 0:
+            #    continue
+            centres = np.vstack((centres, [centre[0], centre[1]]))
+
+        pairedCentres = []
+        width = 1.54
+        widthTolerance = 0.11
+        for i in range(len(centres)):
+            for j in range(i + 1, len(centres)):
+                dx = centres[i][0] - centres[j][0]
+                dy = centres[i][1] - centres[j][1]
+                dist = (dx**2 + dy**2)**0.5
+                """
+                if self.fileCounter == 32:
+                    if (abs(centres[i][0]-2.23871134) < 0.01 and abs(centres[i][1]- -4.97020151) < 0.01) or (abs(centres[j][0]-2.23871134) < 0.01 and abs(centres[j][1]- -4.97020151) < 0.01):
+                        print("==")
+                        print(centres[i])
+                        print(centres[j])
+                        if dist < width + widthTolerance and dist > width - widthTolerance:
+                            print("xx")
+                        print("n", dist)
+                        """
+                if dist < width + widthTolerance and dist > width - widthTolerance:
+                    pairedCentres.append([centres[i], i, centres[j], j])
+
+        length = 2.555
+        lengthTolerance = 0.15
+        diagonal = 2.92
+        diagonalTolerance = 0.18
+        triplets = []
+        tripletsConfirmed = []
+        tripletsHollow = []
+        fourthTolerance = 0.3
+        carVertices = []
+        carVerticesInner = []
+        for pair in pairedCentres:
+            for i in range(len(centres)):
+                if i == pair[1] or i == pair[3]:
+                    continue
+                dx = centres[i][0] - pair[0][0]
+                dy = centres[i][1] - pair[0][1]
+                dista = (dx**2 + dy**2)**0.5
+                dx = centres[i][0] - pair[2][0]
+                dy = centres[i][1] - pair[2][1]
+                distb = (dx**2 + dy**2)**0.5
+
+                cornerPos = None
+                cornerIdx = None
+                otherPos = None
+                otherIdx = None
+                dist = None
+
+                if dista < distb:
+                    cornerPos = pair[0]
+                    cornerIdx = pair[1]
+                    otherPos = pair[2]
+                    otherIdx = pair[3]
+                    dist = dista
+                else:
+                    cornerPos = pair[2]
+                    cornerIdx = pair[3]
+                    otherPos = pair[0]
+                    otherIdx = pair[1]
+                    dist = distb
+
+                if dist < length + lengthTolerance and dist > length - lengthTolerance:
+                    triplets.append([cornerPos, cornerIdx, otherPos, otherIdx, centres[i], i])
+                    dx = centres[i][0] - otherPos[0]
+                    dy = centres[i][1] - otherPos[1]
+                    dist = (dx**2 + dy**2)**0.5
+                    if dist < diagonal + diagonalTolerance and dist > diagonal - diagonalTolerance:
+                        tripletsConfirmed.append([cornerPos, cornerIdx, otherPos, otherIdx, centres[i], i])
+
+                        midX = (otherPos[0] + centres[i][0])/2
+                        midY = (otherPos[1] + centres[i][1])/2
+                        deltaX = midX - cornerPos[0]
+                        deltaY = midY - cornerPos[1]
+                        fourthX = cornerPos[0] + (2*deltaX)
+                        fourthY = cornerPos[1] + (2*deltaY)
+
+                        for j in range(len(centres)):
+                            if j == cornerIdx or j == otherIdx or j == i:
+                                continue
+                            dx = fourthX - centres[j][0]
+                            dy = fourthY - centres[j][1]
+                            dist = (dx**2 + dy**2)**0.5
+                            if dist < fourthTolerance:
+                                fourthX = centres[j][0]
+                                fourthY = centres[j][1]
+
+                        vertices = [cornerPos, otherPos, centres[i], [fourthX, fourthY]]
+                        carVertices.append(vertices)
+
+                        innerRatio = 0.2
+                        if innerRatio <= 0 or innerRatio >= 0.5:
+                            #self.queue.put(str(innerRation) + " not within 0<x<0.5")
+                            pass
+
+                        newVertices = []
+
+                        current = vertices[0]
+                        opposite = vertices[3] 
+                        newVertexX = (innerRatio*current[0]) + ((1-innerRatio)*opposite[0])
+                        newVertexY = (innerRatio*current[1]) + ((1-innerRatio)*opposite[1])
+                        newVertex = [newVertexX, newVertexY]
+                        newVertices.append(newVertex)
+                                         
+                        current = vertices[1]
+                        opposite = vertices[2] 
+                        newVertexX = (innerRatio*current[0]) + ((1-innerRatio)*opposite[0])
+                        newVertexY = (innerRatio*current[1]) + ((1-innerRatio)*opposite[1])
+                        newVertex = [newVertexX, newVertexY]
+                        newVertices.append(newVertex)
+                        
+                        current = vertices[2]
+                        opposite = vertices[1] 
+                        newVertexX = (innerRatio*current[0]) + ((1-innerRatio)*opposite[0])
+                        newVertexY = (innerRatio*current[1]) + ((1-innerRatio)*opposite[1])
+                        newVertex = [newVertexX, newVertexY]
+                        newVertices.append(newVertex)
+                        
+                        current = vertices[3]
+                        opposite = vertices[0] 
+                        newVertexX = (innerRatio*current[0]) + ((1-innerRatio)*opposite[0])
+                        newVertexY = (innerRatio*current[1]) + ((1-innerRatio)*opposite[1])
+                        newVertex = [newVertexX, newVertexY]
+                        newVertices.append(newVertex)
+
+                        pointsInside = 0
+                        counterPos = (10000, 0)
+                        for p in points:
+                            intersects = 0
+
+                            for idx in range(len(newVertices)):
+                                pa = newVertices[idx]
+                                pb = newVertices[0]
+                                if idx != len(newVertices)-1:
+                                    pb = newVertices[idx+1]
+
+                                if utils.lineIntersect([p[0], p[1]], counterPos, pa, pb):
+                                    intersects += 1
+
+                            if intersects % 2:
+                                pointsInside += 1
+                        
+                        if pointsInside <= self.maxPointsInInner:
+                            carVerticesInner.append(newVertices)
+
+        res = 1024
+        scale = 25
+        img = np.zeros((res, res, 3))
+        img.fill(255)
+            
+        for point in scan:
+            x, y = point[:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            try:
+                img[x+int(res/2), y+int(res/2)] = [0, 0, 0]
+            except:
+                pass
+
+        for i in centres:
+            x, y = i[:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            col = [0, 0, 255]
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+
+        for i in pairedCentres:
+            x, y = i[0][:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            col = [255, 0, 0]
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+            x, y = i[2][:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+
+        for i in tripletsConfirmed:
+        #for i in triplets:
+            col = [0, 255, 0]
+            x, y = i[0][:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+            x, y = i[2][:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+            x, y = i[4][:2]
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            try:
+                img[x+int(res/2), y+int(res/2)] = col
+            except:
+                pass
+
+            try:
+                img[x+int(res/2)+1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)+1, y+int(res/2)-1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)+1] = col
+            except:
+                pass
+            try:
+                img[x+int(res/2)-1, y+int(res/2)-1] = col
+            except:
+                pass
+
+        carVertices.append
+
+        carPos = []
+        for i in tripletsConfirmed:
+            break
+            midX = (i[2][0] + i[4][0])/2
+            midY = (i[2][1] + i[4][1])/2
+            carPos.append([midX, midY])
+
+            x, y = midX, midY
+            x *= scale
+            y *= scale
+            x = int(x)
+            y = int(y)
+            x += int(res/2)
+            y += int(res/2)
+            size = 4
+            img[x-size:x+size, y-size:y+size] = [255, 255, 0]
+        
+        for i in carVerticesInner:
+            for val in i:
+                x, y = val[0], val[1]
+                x *= scale
+                y *= scale
+                x = int(x)
+                y = int(y)
+                x += int(res/2)
+                y += int(res/2)
+                size = 6
+                img[x-size:x+size, y-size:y+size] = [255, 0, 255]
+
+        dilation=3
+        kernel = np.ones((dilation, dilation), 'uint8')
+        img = cv2.erode(img, kernel, iterations=1)
+        cv2.imwrite(visualisationPath + "/" + self.filename + str(self.fileCounter) + ".png", img)
+
+        cars = []
+        for i in carVerticesInner:
+            x = 0
+            y = 0
+            for p in i:
+                x += p[0]
+                y += p[1]
+            x /= 4
+            y /= 4
+            dX = i[0][0] - i[2][0]
+            dY = i[0][1] - i[2][1]
+            angle = math.atan2(dY, dX)
+            angle = angle % math.pi
+            car = [x, y, angle]
+            cars.append(car)
 
         return cars
 
@@ -141,10 +549,14 @@ class Detector(multiprocessing.Process):
                     parent_clusters = np.append(parent_clusters, i)
                 tmp = (DIVISION_FACTOR - 1) * sub_cluster_size
                 center = np.mean(cluster[tmp:, :], axis=0)
+                if center[0] >0 or center[1] < 0:
+                    continue
                 cluster_centers = np.vstack((cluster_centers, [center[0], center[1], i]))
                 parent_clusters = np.append(parent_clusters, i)
             else:
                 center = np.mean(cluster, axis=0)
+                if center[0] >0 or center[1] < 0:
+                    continue
                 cluster_centers = np.vstack((cluster_centers, [center[0], center[1], i]))
                 parent_clusters = np.append(parent_clusters, i)
 
@@ -319,7 +731,6 @@ class Detector(multiprocessing.Process):
             wheels.append([i[0], i[1]])
             cols.append([255, 0, 0])
 
-
         if len(wheels) > 0:
             fn = os.path.join(visualisationPath, "clusters-j-c")
             os.makedirs(fn, exist_ok=True)
@@ -327,7 +738,28 @@ class Detector(multiprocessing.Process):
             utils.drawImgFromPoints(fn, np.concatenate([points, middle_points]), np.concatenate([cluster_centers[:, :2], wheels]), cols)
         return cars
 
+def listener(q, total):
+    pbar = tqdm.tqdm(total=total)
+    for item in iter(q.get, None):
+        if type(item) == int:
+            pbar.update()
+        else:
+            tqdm.tqdm.write(str(item))
+
 if __name__ == "__main__":
+
+    count = 0
+    with open(os.path.join(datasetPath, "statistics.pkl"), "rb") as f:
+        data = pickle.load(f)
+    for i in data:
+        count += i[-1]
+    os.makedirs(outputPath, exist_ok=True)
+    shutil.copy(os.path.join(datasetPath, "statistics.pkl"), outputPath)
+
+    manager = multiprocessing.Manager()
+    queue = manager.Queue()
+    listenProcess = multiprocessing.Process(target=listener, args=(queue, count))
+    listenProcess.start()
 
     jobs = []
     for files in os.walk(datasetPath):
@@ -336,16 +768,23 @@ if __name__ == "__main__":
                 continue
             path = datasetPath
             folder = files[0][len(path):]
-            jobs.append(Detector(path, folder, filename))
-    print("Spawned %i processes" % (len(jobs)), flush = True)
-    maxCores = 7
-    limit = maxCores
-    batch = maxCores
-    for i in range(len(jobs)):
-        if i < limit:
-            jobs[i].start()
-        else:
-            for j in range(limit):
-                jobs[j].join()
-            limit += batch
-            jobs[i].start()
+            jobs.append(Detector(path, folder, filename, queue))
+    
+    workers = 5
+    futures = []
+    queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
+        for job in jobs:
+            f = ex.submit(job.run)
+            futures.append(f)
+
+        for future in futures:
+            try:
+                pass
+                #queue.put(str(future.result()))
+            except Exception as e:
+                queue.put("P Exception: " + str(e))
+
+    queue.put(None)
+    listenProcess.join()
+

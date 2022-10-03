@@ -19,10 +19,12 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
+gtPath = "../data/gt"
 extractEveryFrame = False
 datasetPath = "../data/rosbags_filtered/"
 outputPath = "../data/extracted/"
 lp = lg.LaserProjection()
+requireThreeD = False
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -31,12 +33,13 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Extractor():
-    def __init__(self, path, folder, filename, queue):
+    def __init__(self, path, folder, filename, queue, gtBags):
 
         self.path = path
         self.folder = folder
         self.filename = filename
         self.queue = queue
+        self.gtbags = gtBags
 
         self.lastX, self.lastY = None, None
         self.distThresh = 0.05
@@ -46,9 +49,16 @@ class Extractor():
         self.trans = []
         self.ts = []
 
+        self.gtbag = None
+        for i in gtBags:
+            if i[2] == self.filename:
+                self.gtbag = i
+        if self.gtbag:
+            with open(os.path.join(*self.gtbag[:2], self.gtbag[3]), "rb") as f:
+                self.gtbag = pickle.load(f, encoding="latin1")
+
         self.scanTopics = ["/back_right/sick_safetyscanners/scan", 
                 "/front/sick_safetyscanners/scan",
-                "/back_low/scan",
                 "/back_left/sick_safetyscanners/scan",
                 "/back_middle/scan"]
         self.synchroniseToTopic = self.scanTopics[-1] #MUST always be last from list (back middle higher fps)
@@ -194,10 +204,11 @@ class Extractor():
         #print("Writing %s" % (fn))
         with open(fn, "wb") as f:
             pickle.dump({"scans": self.scans}, f)
-        fn = os.path.join(outputPath, self.folder, self.filename + ".3d.pickle")
-        #print("Writing %s" % (fn))
-        with open(fn, "wb") as f:
-            pickle.dump({"pointclouds": self.pointclouds}, f)
+        if requireThreeD:
+            fn = os.path.join(outputPath, self.folder, self.filename + ".3d.pickle")
+            #print("Writing %s" % (fn))
+            with open(fn, "wb") as f:
+                pickle.dump({"pointclouds": self.pointclouds}, f)
         fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
         #print("Writing %s" % (fn))
         with open(fn, "wb") as f:
@@ -215,15 +226,26 @@ class Extractor():
                     pass
             return
 
-        if self.pointcloudScanBuf is None:
-            self.queue.put("Unable to grab a 3d scan frame from %s" % (self.filename))
-            return
+        if requireThreeD:
+            if self.pointcloudScanBuf is None:
+                self.queue.put("Unable to grab a 3d scan frame from %s" % (self.filename))
+                return
 
         msgs = copy.deepcopy(self.topicBuf)
         msgs.append(msg)
 
-        if extractEveryFrame == False:
-            if not self.odometryMoved():# and self.filename not in self.gtBags:
+        if self.gtbag is None:
+            if extractEveryFrame == False:
+                if not self.odometryMoved():# and self.filename not in self.gtBags:
+                    return
+        else:
+            tFound = False
+            for frame in self.gtbag[1]:
+                gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
+                if gttime == t:
+                    tFound = True
+                    break
+            if tFound == False:
                 return
         #print("Robot moved!", flush=True)
 
@@ -241,7 +263,8 @@ class Extractor():
         #for p in pcpoints:
         #    self.pointcloudfile.write("%f %f %f, " % (p[0], p[1], p[2]))
         #self.pointcloudfile.write("\n")
-        self.pointclouds.append(self.cloudToArray(self.pointcloudScanBuf))
+        if requireThreeD:
+            self.pointclouds.append(self.cloudToArray(self.pointcloudScanBuf))
         self.fileCounter += 1
 
         #self.pointcloudScanBuf = None
@@ -292,6 +315,16 @@ def listener(q, total):
 
 if __name__ == "__main__":
     
+    gtBags = []
+    for files in os.walk(gtPath):
+        for fn in files[2]:
+            if "-lidar.pkl" in fn:
+                origFn = fn
+                fn = fn.split("-")[:-1]
+                fn = "-".join(fn)
+                fn += ".bag"
+                gtBags.append([gtPath, files[0][len(gtPath)+1:], fn, origFn])
+
     manager = multiprocessing.Manager()
     queue = manager.Queue()
 
@@ -301,7 +334,7 @@ if __name__ == "__main__":
             if filename[-4:] == ".bag":
                 path = datasetPath
                 folder = files[0][len(path):]
-                jobs.append(Extractor(path, folder, filename, queue))
+                jobs.append(Extractor(path, folder, filename, queue, gtBags))
     
     listenProcess = multiprocessing.Process(target=listener, args=(queue, len(jobs)))
     listenProcess.start()
@@ -316,8 +349,8 @@ if __name__ == "__main__":
 
         for future in futures:
             try:
+                queue.put("Bag frames: " + str(future.result()))
                 pass
-                #queue.put(str(future.result()))
             except Exception as e:
                 queue.put("P Exception: " + str(e))
 

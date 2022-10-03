@@ -7,10 +7,10 @@ import math
 import cv2
 import sys
 import os
-import rosbag
-import multiprocessing
 import time
 import numpy as np
+import concurrent
+import tqdm
 from os import devnull
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from scipy.spatial.transform import Rotation as R
@@ -38,9 +38,8 @@ def suppress_stdout_stderr():
         with redirect_stderr(fnull) as err, redirect_stdout(fnull) as out:
             yield (err, out)
 
-class Annotator(multiprocessing.Process):
+class Annotator():
     def __init__(self, path, folder, filename):
-        multiprocessing.Process.__init__(self)
 
         self.path = path
         self.folder = folder
@@ -207,16 +206,14 @@ if __name__ == "__main__":
                 folder = files[0][len(path):]
                 jobs.append(Annotator(path, folder, filename))
 
-    print("Spawned %i processes" % (len(jobs)), flush = True)
-    cpuCores = 12
-    limit = cpuCores
-    batch = cpuCores
-    for i in range(len(jobs)):
-        if i < limit:
-            jobs[i].start()
-        else:
-            for j in range(limit):
-                jobs[j].join()
-            limit += batch
-            jobs[i].start()
+    workers = 8
+    print("Starting %i jobs with %i workers" % (len(jobs), workers))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as e:
+        with tqdm.tqdm(total=len(jobs)) as p:
+            fs = []
+            for i in range(len(jobs)):
+                f = e.submit(jobs[i].run)
+                fs.append(f)
+            for f in concurrent.futures.as_completed(fs):
+                p.update()
 

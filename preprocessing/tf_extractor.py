@@ -18,7 +18,7 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "../../skoda-collection/rosbags/"
+datasetPath = "../data/rosbags_filtered/"
 outputPath = "../data/static_tfs/"
 lp = lg.LaserProjection()
 
@@ -37,10 +37,10 @@ class Extractor():
 
         self.scanTopics = ["sick_back_left", 
                 "sick_back_right", 
-                "sick_back_low",
+                #"sick_back_low",
                 "sick_back_middle",
-                "sick_front",
-                "os_sensor"]
+                "sick_front"]
+                #"os_sensor"]
 
     def run(self):
         
