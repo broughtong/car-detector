@@ -11,12 +11,19 @@ def filterBag(filename, newfolder, newfilename):
         with rosbag.Bag(filename, 'r') as bag:
             tss = []
             msgs = []
+            ctr = 0
             for (topic, msg, ts) in bag.read_messages():
+                if topic == "/tf_static":
+                    newbag.write(topic, msg, ts)
 
                 if topic != "/tf":
                     newbag.write(topic, msg, ts)
+
                 else:
                     if msg.transforms[0].header.frame_id == "map":
+                        continue
+                    ctr += 1
+                    if ctr < 30:
                         continue
 
                     #check for duplicates

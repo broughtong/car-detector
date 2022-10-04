@@ -11,7 +11,7 @@ import multiprocessing
 import utils
 import tqdm
 import concurrent
-import concurrent.futures as fts
+import concurrent.futures
 
 datasetPath = "../data/detector0.08"
 scanField = "scans"
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     workers = 2
     futures = []
     queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
-    with fts.ProcessPoolExecutor(max_workers=workers) as ex:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
         for job in jobs:
             f = ex.submit(job.run)
             futures.append(f)

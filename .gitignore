@@ -1,4 +1,5 @@
 data/
+evaluation/results/
 annotations/
 *.bin
 *.npy

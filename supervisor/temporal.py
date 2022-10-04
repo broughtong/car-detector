@@ -8,6 +8,7 @@ import sys
 import os
 import time
 import concurrent
+import concurrent.futures
 import multiprocessing
 import tqdm
 from os import devnull
@@ -16,10 +17,6 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-datasetPath = "../data/detector/"
-outputPath = "../data/temporal"
-visualisationPath = "../visualisation/temporal-"
-
 @contextmanager
 def suppress_stdout_stderr():
     with open(devnull, 'w') as fnull:
@@ -27,12 +24,15 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Temporal():
-    def __init__(self, path, folder, filename, queue, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired):
+    def __init__(self, path, folder, filename, queue, detectionDistance, interpolateFrames, interpolateRequired, extrapolateFrames, extrapolateRequired, datasetPath, outputPath):
 
         self.path = path
         self.folder = folder
         self.filename = filename[:-12]
         self.queue = queue
+        self.datasetPath = datasetPath
+        self.op = outputPath
+
         self.detectionDistance = detectionDistance
         self.interpolateFrames = interpolateFrames
         self.interpolateRequired = interpolateRequired
@@ -43,13 +43,13 @@ class Temporal():
         self.outputPath = outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired))
     
         os.makedirs(self.outputPath, exist_ok=True)
-        shutil.copy(os.path.join(datasetPath, "statistics.pkl"), self.outputPath)
+        shutil.copy(os.path.join(self.datasetPath, "statistics.pkl"), self.outputPath)
 
     def run(self):
 
         self.queue.put("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
 
-        foldername = os.path.join(outputPath + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
+        foldername = os.path.join(self.op + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
         if os.path.isfile(os.path.join(foldername, self.filename + ".data.pickle")):
             if os.path.getsize(os.path.join(foldername, self.filename + ".data.pickle")) > 0:
                 #print("Skipping, exists...")
@@ -476,6 +476,8 @@ def listener(q, total):
 
 if __name__ == "__main__":
 
+    datasetPath = "../data/detector/"
+
     count = 0
     with open(os.path.join(datasetPath, "statistics.pkl"), "rb") as f:
         data = pickle.load(f)
@@ -484,19 +486,32 @@ if __name__ == "__main__":
 
     manager = multiprocessing.Manager()
     queue = manager.Queue()
-    listenProcess = multiprocessing.Process(target=listener, args=(queue, count*2))
+    listenProcess = multiprocessing.Process(target=listener, args=(queue, count*2700))
     listenProcess.start()
 
     jobs = []
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
+                if "drive" not in filename:
+                    continue
                 path = datasetPath
                 folder = files[0][len(path):]
-                jobs.append(Temporal(path, folder, filename, queue, 0.8, 50, 5, 50, 10))
-                #distance thresh, interp window, interp dets req, extrap window, extrap dets req
+                
+                for a in [0.3, 0.6, 1.0]:
+                    for b in range(25, 275, 60):
+                        for c in range(3, 50, 9):
+                            for d in range(25, 275, 60):
+                                for e in range(3, 50, 9):
+                                    outputPath = "../data/temporal/temporal-%s-%s-%s-%s-%s" % (a, b, c, d, e)
+                                    jobs.append(Temporal(path, folder, filename, queue, a, b, c, d, e, datasetPath, outputPath))
+                                    break
+                                break
+                            break
+                        break
+                                    #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
-    workers = 6
+    workers = 5
     futures = []
     queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
