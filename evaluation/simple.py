@@ -46,7 +46,6 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     with open(tffn, "rb") as f:
         tfdata = pickle.load(f)
     with open(gtfn, "rb") as f:
-        print(gtfn)
         gtdata = pickle.load(f)
 
     #analysis variables
@@ -318,7 +317,7 @@ def run(datasetPath, tfPath, gtPath, annoField):
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                if "drive" not in filename:
+                if "4-planar" not in files[0]:
                     continue
                 path = datasetPath
                 folder = files[0][len(path)+1:]
@@ -327,6 +326,7 @@ def run(datasetPath, tfPath, gtPath, annoField):
                     tp += vals[0]
                     fp += vals[1]
                     fn += vals[2]
+
     precision = float('nan')
     recall = float('nan')
     samples = tp + fp + fn
@@ -343,13 +343,11 @@ def run(datasetPath, tfPath, gtPath, annoField):
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/detector"
+    datasetPath = "../data/temporal"
     tfPath = "../data/static_tfs"
     gtPath = "../data/gt"
-    annoField = "annotations"
-    run(datasetPath, tfPath, gtPath, annoField)
+    annoField = "extrapolated"
 
-    """
     ctr = 0
     for files in os.walk("../data/temporal"):
         for filename in files[2]:
@@ -358,4 +356,3 @@ if __name__ == "__main__":
                 run(datasetPath, tfPath, gtPath, annoField)
                 ctr += 1
                 print(ctr)
-    """
