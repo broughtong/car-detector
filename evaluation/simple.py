@@ -10,18 +10,7 @@ import pickle
 import os
 import sys
 
-datasetPath = "../data/temporal/temporal-1.0-25-3-25-31.0-25-3-25-3"
-tfPath = "../data/static_tfs"
-gtPath = "../data/gt"
-visualisationPath = "../visualisation/eval-simple"
-annoField = "extrapolated"
-
-if datasetPath[-1] == "/":
-    datasetPath = datasetPath[:-1]
-resultsPath = os.path.join("./results/", datasetPath.split("/")[-1] + "-" + annoField)
-os.makedirs(resultsPath, exist_ok=True)
-
-def evaluateFile(path, folder, filename):
+def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath):
 
     fn = os.path.join(datasetPath, folder, filename)
     if not os.path.isfile(fn):
@@ -316,7 +305,13 @@ def makeGraph(hist, total, label, xlabel, ylabel, filename):
     fig.savefig(filename)
     plt.close('all')
 
-if __name__ == "__main__":
+
+def run(datasetPath, tfPath, gtPath, annoField):
+
+    if datasetPath[-1] == "/":
+        datasetPath = datasetPath[:-1]
+    resultsPath = os.path.join("./results/", datasetPath.split("/")[-1] + "-" + annoField)
+    os.makedirs(resultsPath, exist_ok=True)
 
     tp, fp, fn = 0, 0, 0
 
@@ -327,18 +322,29 @@ if __name__ == "__main__":
                     continue
                 path = datasetPath
                 folder = files[0][len(path)+1:]
-                vals = evaluateFile(path, folder, filename)
+                vals = evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath)
                 if vals is not None:
                     tp += vals[0]
                     fp += vals[1]
                     fn += vals[2]
     precision = float('nan')
     recall = float('nan')
+    samples = tp + fp + fn
     try:
         precision = tp / (tp+fp)
         recall = tp / (tp+fn)
     except:
         pass
+
+    resultNameString = datasetPath.split("/")[-1]
     with open(os.path.join(resultsPath, "cumulative.txt"), "w") as f:
-        f.write("tp %i fp %i fn %i p %f r %f\n" % (tp, fp, fn, precision, recall))
-        
+        f.write("tp %i fp %i fn %i p %f r %f samples %i %s\n" % (tp, fp, fn, precision, recall, samples, resultNameString))
+
+if __name__ == "__main__":
+
+    datasetPath = "../data/temporal/temporal-1.0-25-3-25-31.0-25-3-25-3"
+    tfPath = "../data/static_tfs"
+    gtPath = "../data/gt"
+    annoField = "extrapolated"
+
+    run(datasetPath, tfPath, gtPath, annoField)
