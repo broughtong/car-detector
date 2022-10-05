@@ -127,7 +127,6 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
         gts = copy.deepcopy(frameAnnotations)[1:]
 
         for rng in tp_range.keys():
-            
             for gt in gts:
                 dist = (gt[0]**2 + gt[1]**2)**0.5
                 if dist > rng:
@@ -142,7 +141,10 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                 if found == True:
                     tp_range[rng] += 1
                 else:
-                    fn_range[rng] += 1
+                    #lets check if there are a certain number of points at least
+                    carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [gt])
+                    if len(nonCarPoints) > 15:
+                        fn_range[rng] += 1
 
             for j in detections:
                 found = False
