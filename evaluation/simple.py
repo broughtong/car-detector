@@ -330,6 +330,7 @@ def run(datasetPath, tfPath, gtPath, annoField):
     precision = float('nan')
     recall = float('nan')
     samples = tp + fp + fn
+    f1 = (2*tp)/((2*tp) + fp + fn)
     try:
         precision = tp / (tp+fp)
         recall = tp / (tp+fn)
@@ -338,13 +339,23 @@ def run(datasetPath, tfPath, gtPath, annoField):
 
     resultNameString = datasetPath.split("/")[-1]
     with open(os.path.join(resultsPath, "cumulative.txt"), "w") as f:
-        f.write("tp %i fp %i fn %i p %f r %f samples %i %s\n" % (tp, fp, fn, precision, recall, samples, resultNameString))
+        f.write("f1 %f tp %i fp %i fn %i p %f r %f samples %i %s\n" % (f1, tp, fp, fn, precision, recall, samples, resultNameString))
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/temporal/temporal-1.0-25-3-25-31.0-25-3-25-3"
+    datasetPath = "../data/detector"
     tfPath = "../data/static_tfs"
     gtPath = "../data/gt"
-    annoField = "extrapolated"
-
+    annoField = "annotations"
     run(datasetPath, tfPath, gtPath, annoField)
+
+    """
+    ctr = 0
+    for files in os.walk("../data/temporal"):
+        for filename in files[2]:
+            if "driveby.bag.data.pickle" in filename:
+                datasetPath = "/".join(files[0].split("/")[:-1])
+                run(datasetPath, tfPath, gtPath, annoField)
+                ctr += 1
+                print(ctr)
+    """

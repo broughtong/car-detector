@@ -49,7 +49,7 @@ class Temporal():
 
         self.queue.put("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
 
-        foldername = os.path.join(self.op + "%s-%s-%s-%s-%s" % (str(self.detectionDistance), str(self.interpolateFrames), str(self.interpolateRequired), str(self.extrapolateFrames), str(self.extrapolateRequired)), self.folder)
+        foldername = os.path.join(self.op, self.folder)
         if os.path.isfile(os.path.join(foldername, self.filename + ".data.pickle")):
             if os.path.getsize(os.path.join(foldername, self.filename + ".data.pickle")) > 0:
                 #print("Skipping, exists...")
@@ -484,9 +484,16 @@ if __name__ == "__main__":
     for i in data:
         count += i[-1]
 
+    multi = 0
+    for a in [0.3, 0.6, 1.0]:
+        for b in range(25, 275, 75):
+            for c in range(3, 50, 15):
+                for d in range(25, 275, 75):
+                    for e in range(3, 50, 15):
+                        multi += 1
     manager = multiprocessing.Manager()
     queue = manager.Queue()
-    listenProcess = multiprocessing.Process(target=listener, args=(queue, count*2700))
+    listenProcess = multiprocessing.Process(target=listener, args=(queue, count*multi))
     listenProcess.start()
 
     jobs = []
@@ -499,19 +506,15 @@ if __name__ == "__main__":
                 folder = files[0][len(path):]
                 
                 for a in [0.3, 0.6, 1.0]:
-                    for b in range(25, 275, 60):
-                        for c in range(3, 50, 9):
-                            for d in range(25, 275, 60):
-                                for e in range(3, 50, 9):
+                    for b in range(25, 275, 75):
+                        for c in range(3, 50, 15):
+                            for d in range(25, 275, 75):
+                                for e in range(3, 50, 15):
                                     outputPath = "../data/temporal/temporal-%s-%s-%s-%s-%s" % (a, b, c, d, e)
                                     jobs.append(Temporal(path, folder, filename, queue, a, b, c, d, e, datasetPath, outputPath))
-                                    break
-                                break
-                            break
-                        break
                                     #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
-    workers = 5
+    workers = 12
     futures = []
     queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
