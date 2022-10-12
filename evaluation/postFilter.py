@@ -17,7 +17,7 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 import matplotlib.pyplot as plt
 
-annoField = "annotations"
+annoField = "maskrcnn"
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -45,7 +45,7 @@ class Temporal():
         self.outputPath = outputPath
     
         os.makedirs(self.outputPath, exist_ok=True)
-        shutil.copy(os.path.join(self.datasetPath, "statistics.pkl"), self.outputPath)
+        shutil.copy(os.path.join(self.datasetPath, "statistics"), self.outputPath)
 
     def run(self):
 
@@ -60,7 +60,7 @@ class Temporal():
 
         basefn = os.path.join(self.path, self.folder, self.filename)
         os.makedirs(os.path.join(self.outputPath, self.folder), exist_ok=True)
-        shutil.copy(basefn + ".scans.pickle", os.path.join(self.outputPath, self.folder))
+        #shutil.copy(basefn + ".scans.pickle", os.path.join(self.outputPath, self.folder))
         try:
             shutil.copy(basefn + ".3d.pickle", os.path.join(self.outputPath, self.folder))
         except:
@@ -237,16 +237,17 @@ def listener(q, total):
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/detector/"
+    datasetPath = "../data/maskrcnn/rectified/lanoising-08-10-22-04_32_40.pth"
+    outputPath = "../data/maskrcnn/rectified_filtered/lanoising-08-10-22-04_32_40.pth"
+    datasetPath = "../data/maskrcnn/rectified_filtered/scans-08-10-22-03_59_44.pth"
+    outputPath = "../data/maskrcnn/rectified_filtered2/scans-08-10-22-03_59_44.pth"
 
     count = 0
-    with open(os.path.join(datasetPath, "statistics.pkl"), "rb") as f:
-        data = pickle.load(f)
-    for i in data:
-        count += i[-1]
+    #with open(os.path.join(datasetPath, "statistics.pkl"), "rb") as f:
+    #    data = pickle.load(f)
+    #for i in data:
+    #    count += i[-1]
                 
-
-
     multi = 1
     manager = multiprocessing.Manager()
     queue = manager.Queue()
@@ -257,13 +258,8 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                if "drive" not in filename:
-                    continue
                 path = datasetPath
-                folder = files[0][len(path):]
-                outputPath = "../data/temporal/real"
-                a = Temporal(path, folder, filename, queue, 0, 0, 0, 0, 0, datasetPath, outputPath)
-                a.run()
+                folder = files[0][len(path)+1:]
                 jobs.append(Temporal(path, folder, filename, queue, 0, 0, 0, 0, 0, datasetPath, outputPath))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 

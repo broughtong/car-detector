@@ -10,6 +10,8 @@ import pickle
 import os
 import sys
 
+detectorThreshold = 0.92
+
 def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath):
 
     fn = os.path.join(datasetPath, folder, filename)
@@ -17,7 +19,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
         print("Unable to open file: %s" % (fn))
         return
     
-    tffn = "".join(filename.split(".data"))
+    tffn = "".join(filename.split(".data")[0]) + ".pickle"
     tffn = os.path.join(tfPath, folder, tffn)
     if not os.path.isfile(tffn):
         print("Unable to open TF file: %s" % (tffn))
@@ -30,6 +32,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
             if filen == gtfn:
                 gtfn = os.path.join(files[0], gtfn)
 
+
     if not os.path.isfile(gtfn):
         #print("Unable to open GT file: %s %s" % (folder, gtfn))
         return
@@ -41,6 +44,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     with open(fn, "rb") as f:
         data = pickle.load(f)
     scanfn = fn[:-12] + ".scans.pickle"
+    scanfn = os.path.join("../data/extracted/", folder, filename[:-12] + ".scans.pickle")
     with open(scanfn, "rb") as f:
         data.update(pickle.load(f))
     with open(tffn, "rb") as f:
@@ -60,7 +64,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     rot_total = 0
     rot_error = {}
 
-    detectionGraphLimit = 5.0
+    detectionGraphLimit = 1.0
     confusionGraphLimit = 20.0
 
     graph_resolution = 250
@@ -121,11 +125,20 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
 
         ##todo confu matrix probably unused, precision recall graphs. range based data too? orientation? bi-directional  probability graphcs?
 
-        detectionThreshold = 0.75
+        detectionThreshold = 1.75
 
         #confusion matrix
         detections = copy.deepcopy(data[annoField][dataFrameIdx])
+        filteredDetections = []
+        for d in detections:
+            if len(d) > 3:
+                if d[3] < detectorThreshold:
+                    continue
+            filteredDetections.append(d)
+        detections = filteredDetections
         gts = copy.deepcopy(frameAnnotations)[1:]
+
+        utils.drawImgFromPoints("viz/" + filename + "-" + str(fileCounter) + ".png", dataFrame, cars = gts, cars2=detections)
 
         for rng in tp_range.keys():
             for gt in gts:
@@ -144,7 +157,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                 else:
                     #lets check if there are a certain number of points at least
                     carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [gt])
-                    if len(nonCarPoints) > 15:
+                    if len(carPoints) > 15:
                         fn_range[rng] += 1
 
             for j in detections:
@@ -221,7 +234,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
         
         cols = [[255, 128, 128]] * len(frameAnnotations)
         #pointsToImgsDraw(filename, fileCounter, dataFrame, frameAnnotations[1:], cols)
-        #fileCounter += 1
+        fileCounter += 1
 
     #recall distance
     recall_range = {}
@@ -277,8 +290,14 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     if recall == None:
         recall = -1
 
+    f1 = None
+    try:
+        f1 = (2*tp)/((2*tp) + fp + fn)
+    except:
+        pass
+
     print("Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
-    print("Precision/Recall = %f %f" % (precision, recall))
+    print("Precision/Recall/F1 = %f %f %f" % (precision, recall, f1))
     with open(os.path.join(resultsPath, "conf.pickle"), "wb") as f:
         pickle.dump({"tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall}, f, protocol=2)
     with open(os.path.join(resultsPath, "conf.txt"), "w") as f:
@@ -305,6 +324,16 @@ def makeGraph(hist, total, label, xlabel, ylabel, filename):
         print("Not enough vals for graph!")
         return
 
+    newlabels = []
+    for i in label:
+        if "lanois" in i:
+            newlabels.append("MaskRCNN + LaNoise")
+        elif "scan" in i:
+            newlabels.append("MaskRCNN")
+        elif "dete" in i:
+            newlabels.append("Clustering")
+    label = newlabels            
+
     x = []
     y = []
     for key, value in hist.items():
@@ -319,27 +348,47 @@ def makeGraph(hist, total, label, xlabel, ylabel, filename):
     plt.ylim([-0.02, 1.02])
     fig.savefig(filename)
     plt.close('all')
-
-def makeGraphs(hist, total, label, xlabel, ylabel, filename):
+        
+def makeGraphs(hist, total, labels, title, xlabel, ylabel, filename):
 
     for i in total:
         if i < 1:
             print("Not evenough vals for graph!")
             return
+    if len(hist) != len(total):
+        print("Unequal!")
+
+    newlabels = []
+    for i in labels:
+        if "lanois" in i:
+            newlabels.append("MaskRCNN + LaNoise")
+        elif "scan" in i:
+            newlabels.append("MaskRCNN")
+        elif "tempo" in i:
+            newlabels.append("Clustering")
+    labels = newlabels    
 
     fig, ax = plt.subplots()
     for i, v in enumerate(hist):
         x = []
         y = []
+        last = 0
         for key, value in v.items():
             x.append(key)
             y.append(value/total[i])
+            last = value/total[i]
     
-        ax.plot(x, y, label=label)
-    ax.set(xlabel=xlabel, ylabel=ylabel, title='')
+
+        ax.plot(x, y, label=labels[i])
+    #ax.set(xlabel=xlabel, ylabel=ylabel, title='')
+    ax.legend(loc="lower right")
+    ax.set_xlabel(xlabel, fontsize = 16)
+    ax.set_ylabel(ylabel, fontsize = 16)
     ax.grid(linestyle="--")
     #ax.legend(loc='lower right')
     plt.ylim([-0.02, 1.02])
+    if "ange" in title:
+        plt.xlim([6, 20])
     fig.savefig(filename)
     plt.close('all')
 
@@ -347,29 +396,103 @@ def generateGraphs(results, evalName):
 
     resultsPath = os.path.join("./results/", evalName)
     os.makedirs(resultsPath, exist_ok=True)
+    graphPath = os.path.join(resultsPath, "graph")
+    os.makedirs(graphPath, exist_ok=True)
+
+    usedIdxs = []
+    total = []
+    for i in range(len(results)):
+        if i in usedIdxs:
+            continue
+        usedIdxs.append(i)
+        method = results[i][-1][0].split("/")[-1]
+        filename = results[i][-1][2]
+        
+        gt_det_hit = [results[i][7]]
+        gt_det_total = [results[i][6]]
+        det_gt_hit = [results[i][9]]
+        det_gt_total = [results[i][8]]
+        rot_error = [results[i][11]]
+        rot_total = [results[i][10]]
+        filteredRecall = [results[i][12]] 
+        filteredPrecision = [results[i][13]]
+        labels = [method]
+        
+        for j in range(i+1, len(results)):
+            if j in usedIdxs:
+                continue
+            if results[j][-1][2] == results[i][-1][2]:
+                usedIdxs.append(j)
+                nmethod = results[j][-1][0].split("/")[-1]
+                nfilename = results[j][-1][2]
+
+                gt_det_hit.append(results[j][7])
+                gt_det_total.append(results[j][6])
+                det_gt_hit.append(results[j][9])
+                det_gt_total.append(results[j][8])
+                rot_error.append(results[j][11])
+                rot_total.append(results[j][10])
+                filteredRecall.append(results[j][12])
+                filteredPrecision.append(results[j][13])
+                labels.append(nmethod)
+                
+        makeGraphs(gt_det_hit, gt_det_total, labels, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, filename + "-gtdet.png"))
+        makeGraphs(det_gt_hit, det_gt_total, labels, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, filename + "-detgt.png"))
+        makeGraphs(rot_error, rot_total, labels, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, filename + "-rot.png"))
+        makeGraphs(filteredRecall, [1.0]*len(filteredRecall), labels, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, filename + "-recall.png"))
+        makeGraphs(filteredPrecision, [1.0]*len(filteredPrecision), labels, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, filename + "-precision.png"))
+
+    gt_det_hit = []
+    gt_det_total = []
+    det_gt_hit = []
+    det_gt_total = []
+    rot_error = []
+    rot_total = []
+    filteredRecall = []
+    filteredPrecision = []
+    labels = []
 
     for i in range(len(results)):
-        for j in range(i+1, len(results)):
-            a = results[i]
-            b = results[j]
-            if a[-1][2] == b[-1][2]:
-                graphPath = os.path.join(resultsPath, "graph")
-                os.makedirs(graphPath, exist_ok=True)
+        method = results[i][-1][0].split("/")[-1]
 
-                gt_det_hit = [a[7], b[7]]
-                gt_det_total = [a[6], b[6]]
-                det_gt_hit = [a[9], b[9]]
-                det_gt_total = [a[8], b[8]]
-                rot_error = [a[11], b[11]]
-                rot_total = [a[10], b[10]]
-                filteredRecall = [a[12], b[12]] 
-                filteredPrecision = [a[13], b[13]]
+        if method not in labels:
+            gt_det_hit.append(results[i][7])
+            gt_det_total.append(results[i][6])
+            det_gt_hit.append(results[i][9])
+            det_gt_total.append(results[i][8])
+            rot_error.append(results[i][11])
+            rot_total.append(results[i][10])
+            filteredRecall.append(results[i][12])
+            filteredPrecision.append(results[i][13])
+            labels.append(method)
+        else:
+            idx = labels.index(method)
+            ngt_det_hit = {}
+            for key, value in gt_det_hit[idx].items():
+                ngt_det_hit[key] = value + results[i][7][key]
+            gt_det_total[idx] += results[i][6]
+            gt_det_hit[idx] = ngt_det_hit
+            ndet_gt_hit = {}
+            for key, value in det_gt_hit[idx].items():
+                ndet_gt_hit[key] = value + results[i][9][key]
+            det_gt_total[idx] += results[i][8]
+            det_gt_hit[idx] = ngt_det_hit
+            nrot_error = {}
+            for key, value in rot_error[idx].items():
+                nrot_error[key] = value + results[i][11][key]
+            rot_total[idx] += results[i][10]
+            rot_error[idx] = nrot_error
 
-                makeGraphs(gt_det_hit, gt_det_total, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "gtdet.png"))
-                makeGraphs(det_gt_hit, det_gt_total, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "detgt.png"))
-                makeGraphs(rot_error, rot_total, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "rot.png"))
-                makeGraphs(filteredRecall, [1.0, 1.0], "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "recall.png"))
-                makeGraphs(filteredPrecision, [1.0, 1.0], "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "precision.png"))
+        #to get filtered recall precision,
+        #you need to take the results[3,4,5] ie tp_range, fn, fp
+        #and manually sum them, then regenerate teh prec/recall range from that
+
+    makeGraphs(gt_det_hit, gt_det_total, labels, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "total-gtdet.png"))
+    makeGraphs(det_gt_hit, det_gt_total, labels, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "total-detgt.png"))
+    makeGraphs(rot_error, rot_total, labels, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "total-rot.png"))
+    #makeGraphs(filteredRecall, [1.0, 1.0], labels, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "total-recall.png"))
+    #makeGraphs(filteredPrecision, [1.0, 1.0], labels, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "total-precision.png"))
+            
 
 def run(datasetPath, tfPath, gtPath, annoField):
 
@@ -384,11 +507,24 @@ def run(datasetPath, tfPath, gtPath, annoField):
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                if "drive" not in filename:
+                #if "drive" not in filename and "one" not in filename:
+                #    continue
+                #if "24-42" not in filename and "10-16" not in filename:
+                #    continue
+                bgs = ["08-42", "42-54", "22-07", "53-06", "10-16", "24-42"]
+                f = False
+                for i in bgs:
+                    if i in filename:
+                        print("NEW")
+                        f = True
+                if f == False:
                     continue
+                
                 path = datasetPath
                 folder = files[0][len(path)+1:]
                 vals = evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath)
+                print(path, folder, filename)
+                #print(vals)
                 if vals is not None:
                     tp += vals[0]
                     fp += vals[1]
@@ -406,38 +542,78 @@ def run(datasetPath, tfPath, gtPath, annoField):
         pass
 
     resultNameString = datasetPath.split("/")[-1]
-    with open(os.path.join(resultsPath, "cumulative.txt"), "w") as f:
+    with open(os.path.join(resultsPath, str(detectorThreshold) + "-cumulative.txt"), "w") as f:
         f.write("f1 %f tp %i fp %i fn %i p %f r %f samples %i %s\n" % (f1, tp, fp, fn, precision, recall, samples, resultNameString))
     return results
 
 if __name__ == "__main__":
 
     results = []
-
     tfPath = "../data/static_tfs"
     gtPath = "../data/gt"
 
-    datasetPath = "../data/detector"
+    #single temporal
+    datasetPath = "../data/temporal/temporal-0.6-20-10-20-100.6-20-10-20-10"
     annoField = "annotations"
     results += run(datasetPath, tfPath, gtPath, annoField)
-    datasetPath = "../data/temporal-0.6-100-48-25-480.6-100-48-25-48"
-    datasetPath = "../data/temporal-0.6-25-3-25-30.6-25-3-25-3"
-    annoField = "extrapolated"
-    datasetPath = "../data/detector"
-    annoField = "annotations"
-    results += run(datasetPath, tfPath, gtPath, annoField)
-    
+    generateGraphs(results, "eval-maskrcnn3")
 
     """
+    #multi temporal
+    annoField = "extrapolated"
     ctr = 0
     for files in os.walk("../data/temporal"):
         for filename in files[2]:
-            if "driveby.bag.data.pickle" in filename:
-                datasetPath = "/".join(files[0].split("/")[:-1])
-                run(datasetPath, tfPath, gtPath, annoField)
-                ctr += 1
-                print(ctr)
+            if "statistics" not in filename:
+                continue
+            datasetPath = files[0] #"/".join(files[0].split("/")[:-1])
+            results += run(datasetPath, tfPath, gtPath, annoField)
+            ctr += 1
+            print(ctr)
+
+            generateGraphs(results, "eval-temp-all-tog-1.25-q")
     """
 
-    generateGraphs(results, "eval-temp")
+    #masrcnk
+    annoField = "maskrcnn"
+    ctr = 0
+    for files in os.walk("../data/maskrcnn/rectified"):
+        for filename in files[2]:
+            if "statistics" not in filename:
+                continue
+            datasetPath = files[0] #"/".join(files[0].split("/")[:-1])
+            if "32_40" not in datasetPath and "59_44" not in datasetPath:
+                continue
+            #if "22_32" in datasetPath or "56_23" in datasetPath or "59_44" in datasetPath or "25_55" in datasetPath or "29_17" in datasetPath or "36_04" in datasetPath:
+            #    print("Skipping ", datasetPath) 
+            #    continue
+            results += run(datasetPath, tfPath, gtPath, annoField)
+            ctr += 1
+            print(ctr)
 
+            generateGraphs(results, "eval-maskrcnn3")
+
+
+    """
+    #threshoold
+    annoField = "maskrcnn"
+    ctr = 0
+    for files in os.walk("../data/maskrcnn/rectified"):
+        for filename in files[2]:
+            if "statistics" not in filename:
+                continue
+            datasetPath = files[0] #"/".join(files[0].split("/")[:-1])
+            print(datasetPath, annoField)
+            detectorThreshold = 0.9
+            for i in range(87, 100, 1):
+                detectorThreshold = i/100
+                print("det threshd", detectorThreshold)
+                results += run(datasetPath, tfPath, gtPath, annoField)
+            ctr += 1
+            print(ctr)
+
+            generateGraphs(results, "eval-maskrcnn")
+            break
+    
+
+    """
