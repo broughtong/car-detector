@@ -156,9 +156,9 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                     tp_range[rng] += 1
                 else:
                     #lets check if there are a certain number of points at least
-                    carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [gt])
-                    if len(carPoints) > 15:
-                        fn_range[rng] += 1
+                    #carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [gt])
+                    #if len(carPoints) > 15:
+                    fn_range[rng] += 1
 
             for j in detections:
                 found = False
@@ -315,7 +315,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     results.append(rot_error)
     results.append(filteredRecall)
     results.append(filteredPrecision)
-    results.append([path, folder, filename])
+    results.append([path, folder, filename, annoField])
     return results
 
 def makeGraph(hist, total, label, xlabel, ylabel, filename):
@@ -356,7 +356,7 @@ def makeGraphs(hist, total, labels, title, xlabel, ylabel, filename):
             print("Not evenough vals for graph!")
             return
     if len(hist) != len(total):
-        print("Unequal!")
+        print("Unequal!", title)
 
     newlabels = []
     for i in labels:
@@ -405,7 +405,7 @@ def generateGraphs(results, evalName):
         if i in usedIdxs:
             continue
         usedIdxs.append(i)
-        method = results[i][-1][0].split("/")[-1]
+        method = results[i][-1][0].split("/")[-1] + "-" + results[i][-1][-1]
         filename = results[i][-1][2]
         
         gt_det_hit = [results[i][7]]
@@ -423,7 +423,7 @@ def generateGraphs(results, evalName):
                 continue
             if results[j][-1][2] == results[i][-1][2]:
                 usedIdxs.append(j)
-                nmethod = results[j][-1][0].split("/")[-1]
+                nmethod = results[j][-1][0].split("/")[-1]  + "-" + results[i][-1][-1]
                 nfilename = results[j][-1][2]
 
                 gt_det_hit.append(results[j][7])
@@ -451,9 +451,12 @@ def generateGraphs(results, evalName):
     filteredRecall = []
     filteredPrecision = []
     labels = []
+    tp_range = []
+    fp_range = []
+    fn_range = []
 
     for i in range(len(results)):
-        method = results[i][-1][0].split("/")[-1]
+        method = results[i][-1][0].split("/")[-1] + "-" + results[i][-1][-1]
 
         if method not in labels:
             gt_det_hit.append(results[i][7])
@@ -465,6 +468,9 @@ def generateGraphs(results, evalName):
             filteredRecall.append(results[i][12])
             filteredPrecision.append(results[i][13])
             labels.append(method)
+            tp_range.append([results[i][3]])
+            fp_range.append([results[i][4]])
+            fn_range.append([results[i][5]])
         else:
             idx = labels.index(method)
             ngt_det_hit = {}
@@ -482,16 +488,101 @@ def generateGraphs(results, evalName):
                 nrot_error[key] = value + results[i][11][key]
             rot_total[idx] += results[i][10]
             rot_error[idx] = nrot_error
+            tp_range[idx].append(results[i][3])
+            fp_range[idx].append(results[i][4])
+            fn_range[idx].append(results[i][5])
 
         #to get filtered recall precision,
         #you need to take the results[3,4,5] ie tp_range, fn, fp
         #and manually sum them, then regenerate teh prec/recall range from that
 
+    filteredRecall = []
+    filteredPrecision = []
+    lastVal = None
+    for methodIdx in range(len(tp_range)):
+        totalTP = {}
+        totalFP = {}
+        totalFN = {}
+        for fileIdx in range(len(tp_range[methodIdx])):
+            tp = tp_range[methodIdx][fileIdx]
+            fp = fp_range[methodIdx][fileIdx]
+            fn = fn_range[methodIdx][fileIdx]
+            if len(totalTP.keys()) == 0:
+                for key, item in tp.items():
+                    totalTP[key] = item
+                    lastVal = key
+                for key, item in fp.items():
+                    totalFP[key] = item
+                for key, item in fn.items():
+                    totalFN[key] = item
+            else:
+                for key, item in tp.items():
+                    totalTP[key] += item
+                    lastVal = key
+                for key, item in fp.items():
+                    totalFP[key] += item
+                for key, item in fn.items():
+                    totalFN[key] += item
+
+        recall_range = {}
+        precision_range = {}
+        for val in totalTP.keys():
+            if totalTP[val] == 0 and totalFN[val] == 0:
+                recall_range[val] = None
+            else:
+                recall_range[val] = totalTP[val] / (totalTP[val]+totalFN[val])
+            if totalTP[val] == 0 and totalFP[val] == 0:
+                precision_range[val] = None
+            else:
+                precision_range[val] = totalTP[val] / (totalTP[val]+totalFP[val])
+
+        precision = None
+        recall = None
+        try:
+            precision = totalTP[lastVal] / (totalTP[lastVal] + totalFP[lastVal])
+            recall = totalTP[lastVal] / (totalTP[lastVal] + totalFN[lastVal])
+        except:
+            print("Didnt work")
+        tp = totalTP[lastVal]
+        fn = totalFP[lastVal]
+        fp = totalFN[lastVal]
+
+        try:
+            blanksRecall = [x for x in recall_range.keys() if recall_range[x] == None]
+            blanksPrecision = [x for x in precision_range.keys() if precision_range[x] == None]
+            recallIDs = [x for x in recall_range.keys() if x not in blanksRecall]
+            precisionIDs = [x for x in precision_range.keys() if x not in blanksPrecision]
+            filteredRecall.append({})
+            for key in recallIDs:
+                filteredRecall[-1][key] = recall_range[key]
+            filteredPrecision.append({})
+            for key in precisionIDs:
+                filteredPrecision[-1][key] = precision_range[key]
+        except:
+            print("dindit work")
+            pass
+        if precision == None:
+            precision = -1
+        if recall == None:
+            recall = -1
+        f1 = None
+        try:
+            f1 = (2*tp)/((2*tp) + fp + fn)
+        except:
+            pass
+
+        print("====")
+        print(str(labels[methodIdx]))
+        print("Total Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
+        print("Total Precision/Recall/F1 = %f %f %f" % (precision, recall, f1))
+        with open(os.path.join(graphPath, "..", str(labels[methodIdx]) + ".txt"), "w") as f:
+            f.write("tp %i fp %i fn %i precision %f recall %f f1 %f \n" % (tp, fp, fn, precision, recall, f1))
+
     makeGraphs(gt_det_hit, gt_det_total, labels, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "total-gtdet.png"))
     makeGraphs(det_gt_hit, det_gt_total, labels, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "total-detgt.png"))
     makeGraphs(rot_error, rot_total, labels, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "total-rot.png"))
-    #makeGraphs(filteredRecall, [1.0, 1.0], labels, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "total-recall.png"))
-    #makeGraphs(filteredPrecision, [1.0, 1.0], labels, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "total-precision.png"))
+    makeGraphs(filteredRecall, [1.0]*len(filteredRecall), labels, "Recall Range", "Distance [m]", "Recall", os.path.join(graphPath, "total-recall.png"))
+    makeGraphs(filteredPrecision, [1.0]*len(filteredPrecision), labels, "Precision Range", "Distance [m]", "Precision", os.path.join(graphPath, "total-precision.png"))
             
 
 def run(datasetPath, tfPath, gtPath, annoField):
@@ -515,7 +606,6 @@ def run(datasetPath, tfPath, gtPath, annoField):
                 f = False
                 for i in bgs:
                     if i in filename:
-                        print("NEW")
                         f = True
                 if f == False:
                     continue
@@ -523,13 +613,14 @@ def run(datasetPath, tfPath, gtPath, annoField):
                 path = datasetPath
                 folder = files[0][len(path)+1:]
                 vals = evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath)
-                print(path, folder, filename)
+                print(path, folder, filename, annoField)
                 #print(vals)
                 if vals is not None:
                     tp += vals[0]
                     fp += vals[1]
                     fn += vals[2]
                     results.append(vals)
+                break
     precision = float('nan')
     recall = float('nan')
     f1 = float('nan')
@@ -557,6 +648,9 @@ if __name__ == "__main__":
     annoField = "annotations"
     results += run(datasetPath, tfPath, gtPath, annoField)
     generateGraphs(results, "eval-maskrcnn3")
+    annoField = "extrapolated"
+    results += run(datasetPath, tfPath, gtPath, annoField)
+    generateGraphs(results, "eval-maskrcnn3")
 
     """
     #multi temporal
@@ -573,6 +667,10 @@ if __name__ == "__main__":
 
             generateGraphs(results, "eval-temp-all-tog-1.25-q")
     """
+
+    print("fin")
+    import sys
+    sys.exit(0)
 
     #masrcnk
     annoField = "maskrcnn"
