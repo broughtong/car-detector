@@ -1,4 +1,6 @@
 data/
+viz/
+networks/
 weather_sims/*
 datmo/
 evaluation/results/

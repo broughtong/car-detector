@@ -58,11 +58,11 @@ class Temporal():
 
         basefn = os.path.join(self.path, self.folder, self.filename)
         os.makedirs(os.path.join(self.outputPath, self.folder), exist_ok=True)
-        shutil.copy(basefn + ".scans.pickle", os.path.join(self.outputPath, self.folder))
-        try:
-            shutil.copy(basefn + ".3d.pickle", os.path.join(self.outputPath, self.folder))
-        except:
-            pass
+        #shutil.copy(basefn + ".scans.pickle", os.path.join(self.outputPath, self.folder))
+        #try:
+        #    shutil.copy(basefn + ".3d.pickle", os.path.join(self.outputPath, self.folder))
+        #except:
+        #    pass
 
         with open(basefn + ".data.pickle", "rb") as f:
             self.data.update(pickle.load(f))
@@ -485,11 +485,15 @@ if __name__ == "__main__":
         count += i[-1]
 
     multi = 0
-    for a in [0.3, 0.6, 1.0]:
-        for b in range(25, 275, 75):
-            for c in range(3, 50, 15):
-                for d in range(25, 275, 75):
-                    for e in range(3, 50, 15):
+    for a in [0.6]:
+        for b in range(20, 51, 20):
+            for c in range(5, 26, 10):
+                for d in range(10, 51, 20):
+                    for e in range(5, 26, 10):
+                        if c >= b:
+                            continue
+                        if e >= d:
+                            continue
                         multi += 1
     manager = multiprocessing.Manager()
     queue = manager.Queue()
@@ -500,21 +504,25 @@ if __name__ == "__main__":
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                if "drive" not in filename:
-                    continue
                 path = datasetPath
                 folder = files[0][len(path):]
                 
-                for a in [0.3, 0.6, 1.0]:
-                    for b in range(25, 275, 75):
-                        for c in range(3, 50, 15):
-                            for d in range(25, 275, 75):
-                                for e in range(3, 50, 15):
+                for a in [0.6]:
+                    for b in range(20, 51, 10):
+                        for c in range(5, 26, 5):
+                            for d in range(10, 51, 10):
+                                for e in range(5, 26, 5):
+                                    if c >= b:
+                                        continue
+                                    if e >= d:
+                                        continue
                                     outputPath = "../data/temporal/temporal-%s-%s-%s-%s-%s" % (a, b, c, d, e)
+                                    print(outputPath)
+
                                     jobs.append(Temporal(path, folder, filename, queue, a, b, c, d, e, datasetPath, outputPath))
                                     #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 
-    workers = 12
+    workers = 16
     futures = []
     queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
@@ -531,3 +539,4 @@ if __name__ == "__main__":
 
     queue.put(None)
     listenProcess.join()
+    print("Finished :)")

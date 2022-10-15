@@ -59,7 +59,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     rot_total = 0
     rot_error = {}
 
-    detectionGraphLimit = 5.0
+    detectionGraphLimit = 1.0
     confusionGraphLimit = 20.0
 
     graph_resolution = 250
@@ -276,6 +276,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     if recall == None:
         recall = -1
 
+    print(filename)
     print("Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
     print("Precision/Recall = %f %f" % (precision, recall))
     with open(os.path.join(resultsPath, "conf.pickle"), "wb") as f:
@@ -319,8 +320,6 @@ def run(datasetPath, tfPath, gtPath, annoField):
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                if "4-planar" not in files[0]:
-                    continue
                 path = datasetPath
                 folder = files[0][len(path)+1:]
                 vals = evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath)
@@ -345,11 +344,16 @@ def run(datasetPath, tfPath, gtPath, annoField):
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/temporal"
+    datasetPath = "../data/detector"
+    #datasetPath = "../data/temporal/temporal-0.6-100-48-22-80.6-100-48-22-8"
     tfPath = "../data/static_tfs"
     gtPath = "../data/gt"
-    annoField = "extrapolated"
+    annoField = "annotations"
+    #annoField = "extrapolated"
 
+    run(datasetPath, tfPath, gtPath, annoField)
+
+    """
     ctr = 0
     for files in os.walk("../data/temporal"):
         for filename in files[2]:
@@ -358,3 +362,4 @@ if __name__ == "__main__":
                 run(datasetPath, tfPath, gtPath, annoField)
                 ctr += 1
                 print(ctr)
+    """
