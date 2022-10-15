@@ -145,11 +145,16 @@ def getInAnnotation(scan, annotations):
     carPoints = []
     nonCarPoints = []
 
+    annotationVertices = []
+    for annotation in annotations:
+        vertices = getBoundaryPoints(annotation)
+        annotationVertices.append(vertices)
+
     for point in scan:
 
         inAnnotation = False
 
-        for annotation in annotations:
+        for annotation in annotationVertices:
             if isInsideAnnotation(point[:2], annotation):
                 inAnnotation = True
                 break
@@ -161,9 +166,7 @@ def getInAnnotation(scan, annotations):
 
     return carPoints, nonCarPoints
 
-def isInsideAnnotation(pos, annotation):
-
-    poly = getBoundaryPoints(annotation)
+def isInsideAnnotation(pos, poly):
 
     counterPos = (9999, pos[1])
     intersects = 0
