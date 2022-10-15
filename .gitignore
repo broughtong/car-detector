@@ -1,4 +1,6 @@
 data/
+weather_sims/*
+datmo/
 evaluation/results/
 annotations/
 *.bin
