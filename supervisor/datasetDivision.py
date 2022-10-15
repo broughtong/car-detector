@@ -26,13 +26,8 @@ def divide(testingSplit, datasetPath, gtPath):
             if "-lidar.pkl" in fn:
                 fn = fn.split("-")[:-1]
                 fn = "-".join(fn)
-                fn += ".bag"
                 evalBags.append(fn)
     evalBags = list(set(evalBags))
-    evalBags.append("2022-06-08-18-39-00")
-    evalBags.append("2022-06-08-18-46-45")
-    evalBags.append("2022-06-08-18-48-11")
-    evalBags.append("2022-06-08-18-50-35")
 
     #get list of rosbags
     bags = []
@@ -83,10 +78,8 @@ def divide(testingSplit, datasetPath, gtPath):
 
 if __name__ == "__main__":
 
-    #divide(testingSplit=6, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
-    #divide(testingSplit=6, datasetPath="../annotations/scans/mask", gtPath="../data/gt")
-    #divide(testingSplit=8, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
-    #divide(testingSplit=8, datasetPath="../annotations/scans/maskrcnn", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/lanoising/mask", gtPath="../data/gt")
+    divide(testingSplit=8, datasetPath="../annotations/scans/mask", gtPath="../data/gt")
     #divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-ply", gtPath="../data/gt")
-    divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-npy", gtPath="../data/gt")
+    #divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-npy", gtPath="../data/gt")
     #divide(testingSplit=8, datasetPath="../annotations/scans/pointcloud-bin", gtPath="../data/gt")

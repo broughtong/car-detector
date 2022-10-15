@@ -1,4 +1,5 @@
 import cv2
+import random
 import multiprocessing
 import pickle
 import os
@@ -17,7 +18,7 @@ def combineScans(arrOfScans):
 
     return np.concatenate(scans)
 
-def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False):
+def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[], cars2=[], dilation=None, renderAnnotations=False, saltPepperProb=None):
 
     #filename
     #scan points
@@ -102,6 +103,14 @@ def drawImgFromPoints(filename, points, otherPoints=[], otherColours=[], cars=[]
             img[x+int(res/2), y+int(res/2)] = [0, 0, 0]
         except:
             pass
+
+
+    if saltPepperProb is not None:
+        for i in range(res):
+            for j in range(res):
+                k = random.random()
+                if k < saltPepperProb:
+                    img[i][j] = [0, 0, 0]
 
     if dilation is not None:
         kernel = np.ones((dilation, dilation), 'uint8')
