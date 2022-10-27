@@ -85,11 +85,26 @@ def run():
             idx = int(filename.split(".pickle-")[1].split(".")[0])
             with open(os.path.join(inferredPath, modelPath, filename), "rb") as f:
                 annotations = pickle.load(f)
-                data["maskrcnn"][idx] = annotations
+                nmsanno = []
+                for i in range(len(annotations)):
+                    a = annotations[i]
+                    similar = False
+                    for j in range(i+1, len(annotations)):
+                        b = annotations[j] 
+                        diffX = a[0] - b[0]
+                        diffY = a[1] - b[1]
+                        dist = ((diffX**2) + (diffY**2))**0.5
+                        if dist < 0.5:
+                            similar = True
+                            break
+                    if similar == False:
+                        nmsanno.append(a)
+                data["maskrcnn"][idx] = nmsanno
         
         #for i in range(len(readyFiles)):
         #    if data["maskrcnn"][i] == None:
         #        print("Warning, empty frame found")
+
 
         os.makedirs(os.path.join(combinedOutPath, modelPath, combineFolder), exist_ok=True)
         print("Saving to %s" % (os.path.join(combinedOutPath, modelPath, combineFolder, base.split("/")[-1] + ".bag.data.pickle")))
@@ -100,15 +115,15 @@ def run():
 if __name__ == "__main__":
 
     ctr = 0
-    for files in os.walk("../data/maskrcnn/inference"):
+    for files in os.walk("../data/maskrcnn/inference-all"):
         for modelName in files[1]:
 
             ctr += 1
             print(ctr)
 
             combinePath = "../data/temporal/temporal-0.6-20-10-20-100.6-20-10-20-10"
-            inferredPath = "../data/maskrcnn/inference"
-            combinedOutPath = "../data/maskrcnn/rectified"
+            inferredPath = "../data/maskrcnn/inference-all"
+            combinedOutPath = "../data/maskrcnn/rectified-all"
 
             print(combinePath)
             print(inferredPath)

@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 annoField = "maskrcnn"
+annoField = "annotations"
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -115,9 +116,9 @@ class Temporal():
             lerped.append([])
             lerpedOnly.append([])
 
-        distThresh = 0.5
-        minClusterSize = 5
-        self.windowLength = 20
+        distThresh = 0.4
+        minClusterSize = 16
+        self.windowLength = 30
         filteredDets = []
         filteredOnly = []
         for mainIdx in range(len(annotations)):
@@ -237,10 +238,12 @@ def listener(q, total):
 
 if __name__ == "__main__":
 
-    datasetPath = "../data/maskrcnn/rectified/lanoising-08-10-22-04_32_40.pth"
+    datasetPath = "../data/maskrcnn/rectified-all/lanoising-08-10-22-04_32_40.pth"
     outputPath = "../data/maskrcnn/rectified_filtered/lanoising-08-10-22-04_32_40.pth"
-    datasetPath = "../data/maskrcnn/rectified_filtered/scans-08-10-22-03_59_44.pth"
-    outputPath = "../data/maskrcnn/rectified_filtered2/scans-08-10-22-03_59_44.pth"
+    datasetPath = "../data/maskrcnn/rectified-all/scans-08-10-22-03_59_44.pth"
+    outputPath = "../data/maskrcnn/rectified_filtered/scans-08-10-22-03_59_44.pth"
+    datasetPath = "../data/detector"
+    outputPath = "../data/extracted_filtered"
 
     count = 0
     #with open(os.path.join(datasetPath, "statistics.pkl"), "rb") as f:
@@ -260,6 +263,7 @@ if __name__ == "__main__":
             if ".data.pickle" in filename:
                 path = datasetPath
                 folder = files[0][len(path)+1:]
+                print(path, folder, filename)
                 jobs.append(Temporal(path, folder, filename, queue, 0, 0, 0, 0, 0, datasetPath, outputPath))
                 #distance thresh, interp window, interp dets req, extrap window, extrap dets req
 

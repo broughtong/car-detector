@@ -10,7 +10,9 @@ import pickle
 import os
 import sys
 
+badWeather = False
 detectorThreshold = 0.92
+pointsReq = 5
 
 def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath):
 
@@ -50,7 +52,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     with open(tffn, "rb") as f:
         tfdata = pickle.load(f)
     with open(gtfn, "rb") as f:
-        print(gtfn)
+        #print(gtfn)
         gtdata = pickle.load(f)
 
     #analysis variables
@@ -125,7 +127,7 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
 
         ##todo confu matrix probably unused, precision recall graphs. range based data too? orientation? bi-directional  probability graphcs?
 
-        detectionThreshold = 1.75
+        detectionThreshold = 1.00
 
         #confusion matrix
         detections = copy.deepcopy(data[annoField][dataFrameIdx])
@@ -138,10 +140,35 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
         detections = filteredDetections
         gts = copy.deepcopy(frameAnnotations)[1:]
 
+        newDetections = []
+        for i in range(len(detections)):
+            a = detections[i]
+            similar = False
+            for j in range(i+1, len(detections)):
+                b = detections[j]
+                diffX = a[0] - b[0]
+                diffY = a[1] - b[1]
+                dist = ((diffX**2) + (diffY**2))**0.5
+                if dist < 0.5:
+                    similar = True
+                    break
+            if similar == False:
+                newDetections.append(a)
+        detections = newDetections
+
         utils.drawImgFromPoints("viz/" + filename + "-" + str(fileCounter) + ".png", dataFrame, cars = gts, cars2=detections)
 
+        pDetections = []
+        for i in detections:
+            carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [i])
+            pDetections.append(len(carPoints))
+        pGTs = []
+        for i in gts:
+            carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [i])
+            pGTs.append(len(carPoints))
+
         for rng in tp_range.keys():
-            for gt in gts:
+            for idx, gt in enumerate(gts):
                 dist = (gt[0]**2 + gt[1]**2)**0.5
                 if dist > rng:
                     continue
@@ -156,11 +183,10 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                     tp_range[rng] += 1
                 else:
                     #lets check if there are a certain number of points at least
-                    #carPoints, nonCarPoints = utils.getInAnnotation(dataFrame, [gt])
-                    #if len(carPoints) > 15:
-                    fn_range[rng] += 1
+                    if pGTs[idx] > pointsReq:
+                        fn_range[rng] += 1
 
-            for j in detections:
+            for idx, j in enumerate(detections):
                 found = False
                 for gt in gts:
                     dx = gt[0] - j[0]
@@ -172,7 +198,8 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                     dist = (j[0]**2 + j[1]**2)**0.5
                     if dist > rng:
                         continue
-                    fp_range[rng] += 1
+                    if pDetections[idx] > pointsReq:
+                        fp_range[rng] += 1
 
         #orientation graphs
         for j in detections:
@@ -203,39 +230,49 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
                     break
 
         #bi directional prob graphs
-
+        
         #given gt, prob of detection
-        for gt in gts:
-            closestCar = 9999
-            gt_det_total += 1
+        for idx, gt in enumerate(gts):
+            closestCar = 999999
             for j in detections:
                 dx = gt[0] - j[0]
                 dy = gt[1] - j[1]
                 diff = ((dx**2) + (dy**2))**0.5
                 if diff < closestCar:
                     closestCar = diff
+            found = False 
             for key, _ in gt_det_hit.items():
                 if float(key) > closestCar:
                     gt_det_hit[key] += 1
+                    found = True
+            if found == True:
+                gt_det_total += 1
+            elif pGTs[idx] > pointsReq:
+                gt_det_total += 1
 
         #given detection, prob of gt
-        for j in detections:
-            closestGT = 9999
-            det_gt_total += 1
+        for idx, j in enumerate(detections):
+            closestGT = 999999
             for gt in gts:
                 dx = gt[0] - j[0]
                 dy = gt[1] - j[1]
                 diff = ((dx**2) + (dy**2))**0.5
                 if diff < closestGT:
                     closestGT = diff
+            found = False
             for key, _ in det_gt_hit.items():
                 if float(key) > closestGT:
                     det_gt_hit[key] += 1
-        
+                    found = True
+            if found == True:
+                det_gt_total += 1
+            elif pDetections[idx] > pointsReq:
+                det_gt_total += 1
+                pass
+
         cols = [[255, 128, 128]] * len(frameAnnotations)
         #pointsToImgsDraw(filename, fileCounter, dataFrame, frameAnnotations[1:], cols)
         fileCounter += 1
-
     #recall distance
     recall_range = {}
     precision_range = {}
@@ -296,6 +333,9 @@ def evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField,
     except:
         pass
 
+    print("==f==")
+    print(resultsPath)
+    print(filename)
     print("Frame Confusion Matrix (tp/fp/fn):", tp, fp, fn)
     print("Precision/Recall/F1 = %f %f %f" % (precision, recall, f1))
     with open(os.path.join(resultsPath, "conf.pickle"), "wb") as f:
@@ -327,9 +367,9 @@ def makeGraph(hist, total, label, xlabel, ylabel, filename):
     newlabels = []
     for i in label:
         if "lanois" in i:
-            newlabels.append("MaskRCNN + LaNoise")
+            newlabels.append("Auto-Annotated MaskRCNN + LaNoise")
         elif "scan" in i:
-            newlabels.append("MaskRCNN")
+            newlabels.append("Auto-Annotated MaskRCNN")
         elif "dete" in i:
             newlabels.append("Clustering")
     label = newlabels            
@@ -388,7 +428,7 @@ def makeGraphs(hist, total, labels, title, xlabel, ylabel, filename):
     #ax.legend(loc='lower right')
     plt.ylim([-0.02, 1.02])
     if "ange" in title:
-        plt.xlim([6, 20])
+        plt.xlim([4, 20])
     fig.savefig(filename)
     plt.close('all')
 
@@ -469,8 +509,8 @@ def generateGraphs(results, evalName):
             filteredPrecision.append(results[i][13])
             labels.append(method)
             tp_range.append([results[i][3]])
-            fp_range.append([results[i][4]])
-            fn_range.append([results[i][5]])
+            fp_range.append([results[i][5]])
+            fn_range.append([results[i][4]])
         else:
             idx = labels.index(method)
             ngt_det_hit = {}
@@ -489,8 +529,8 @@ def generateGraphs(results, evalName):
             rot_total[idx] += results[i][10]
             rot_error[idx] = nrot_error
             tp_range[idx].append(results[i][3])
-            fp_range[idx].append(results[i][4])
-            fn_range[idx].append(results[i][5])
+            fp_range[idx].append(results[i][5])
+            fn_range[idx].append(results[i][4])
 
         #to get filtered recall precision,
         #you need to take the results[3,4,5] ie tp_range, fn, fp
@@ -544,8 +584,8 @@ def generateGraphs(results, evalName):
         except:
             print("Didnt work")
         tp = totalTP[lastVal]
-        fn = totalFP[lastVal]
-        fp = totalFN[lastVal]
+        fn = totalFN[lastVal]
+        fp = totalFP[lastVal]
 
         try:
             blanksRecall = [x for x in recall_range.keys() if recall_range[x] == None]
@@ -578,6 +618,14 @@ def generateGraphs(results, evalName):
         with open(os.path.join(graphPath, "..", str(labels[methodIdx]) + ".txt"), "w") as f:
             f.write("tp %i fp %i fn %i precision %f recall %f f1 %f \n" % (tp, fp, fn, precision, recall, f1))
 
+    """
+    for i in results:
+        print(i[6])
+        print(i[7])
+    print(gt_det_hit)
+    print(gt_det_total)
+    """
+
     makeGraphs(gt_det_hit, gt_det_total, labels, "GT To Detection", "Distance [m]", "Probability", os.path.join(graphPath, "total-gtdet.png"))
     makeGraphs(det_gt_hit, det_gt_total, labels, "Detection To GT", "Distance [m]", "Probability", os.path.join(graphPath, "total-detgt.png"))
     makeGraphs(rot_error, rot_total, labels, "Rotational Error", "Rotation [rads]", "Probability", os.path.join(graphPath, "total-rot.png"))
@@ -598,29 +646,27 @@ def run(datasetPath, tfPath, gtPath, annoField):
     for files in os.walk(datasetPath):
         for filename in files[2]:
             if ".data.pickle" in filename:
-                #if "drive" not in filename and "one" not in filename:
-                #    continue
-                #if "24-42" not in filename and "10-16" not in filename:
-                #    continue
-                bgs = ["08-42", "42-54", "22-07", "53-06", "10-16", "24-42"]
-                f = False
-                for i in bgs:
-                    if i in filename:
-                        f = True
-                if f == False:
+                if badWeather:
+                    if "5-planar-gt" not in files[0]:
+                        continue
+                else:
+                    if "5-planar-gt" in files[0]:
+                        continue
+
+                if "18-46-45" in filename or "15-41-55" in filename or "15-34-45" in filename:
                     continue
                 
                 path = datasetPath
                 folder = files[0][len(path)+1:]
                 vals = evaluateFile(path, folder, filename, datasetPath, tfPath, gtPath, annoField, resultsPath)
-                print(path, folder, filename, annoField)
+                #print(path, folder, filename, annoField)
                 #print(vals)
                 if vals is not None:
                     tp += vals[0]
                     fp += vals[1]
                     fn += vals[2]
                     results.append(vals)
-                break
+
     precision = float('nan')
     recall = float('nan')
     f1 = float('nan')
@@ -643,14 +689,43 @@ if __name__ == "__main__":
     tfPath = "../data/static_tfs"
     gtPath = "../data/gt"
 
-    #single temporal
+    badWeather = True
+
+    #regular
+    pointsReq = 27
+    results = []
     datasetPath = "../data/temporal/temporal-0.6-20-10-20-100.6-20-10-20-10"
     annoField = "annotations"
     results += run(datasetPath, tfPath, gtPath, annoField)
-    generateGraphs(results, "eval-maskrcnn3")
     annoField = "extrapolated"
+    #results += run(datasetPath, tfPath, gtPath, annoField)
+    datasetPath = "../data/maskrcnn/rectified-all/scans-08-10-22-03_59_44.pth"
+    annoField = "maskrcnn"
     results += run(datasetPath, tfPath, gtPath, annoField)
-    generateGraphs(results, "eval-maskrcnn3")
+    datasetPath = "../data/maskrcnn/rectified-all/lanoising-08-10-22-04_32_40.pth"
+    annoField = "maskrcnn"
+    results += run(datasetPath, tfPath, gtPath, annoField)
+    generateGraphs(results, "bad_unfilt-" + str(pointsReq))
+    """
+
+    #filtered
+    pointsReq = 27
+    results = []
+    datasetPath = "../data/temporal/temporal-0.6-20-10-20-100.6-20-10-20-10"
+    #datasetPath = "../data/extracted_filtered"
+    annoField = "annotations"
+    results += run(datasetPath, tfPath, gtPath, annoField)
+    annoField = "extrapolated"
+    #results += run(datasetPath, tfPath, gtPath, annoField)
+    datasetPath = "../data/maskrcnn/rectified_filtered/scans-08-10-22-03_59_44.pth"
+    annoField = "filtered"
+    results += run(datasetPath, tfPath, gtPath, annoField)
+    datasetPath = "../data/maskrcnn/rectified_filtered/lanoising-08-10-22-04_32_40.pth"
+    annoField = "filtered"
+    results += run(datasetPath, tfPath, gtPath, annoField)
+    generateGraphs(results, "bad_filt-" + str(pointsReq))
+
+    """
 
     """
     #multi temporal
@@ -669,49 +744,3 @@ if __name__ == "__main__":
     """
 
     print("fin")
-    import sys
-    sys.exit(0)
-
-    #masrcnk
-    annoField = "maskrcnn"
-    ctr = 0
-    for files in os.walk("../data/maskrcnn/rectified"):
-        for filename in files[2]:
-            if "statistics" not in filename:
-                continue
-            datasetPath = files[0] #"/".join(files[0].split("/")[:-1])
-            if "32_40" not in datasetPath and "59_44" not in datasetPath:
-                continue
-            #if "22_32" in datasetPath or "56_23" in datasetPath or "59_44" in datasetPath or "25_55" in datasetPath or "29_17" in datasetPath or "36_04" in datasetPath:
-            #    print("Skipping ", datasetPath) 
-            #    continue
-            results += run(datasetPath, tfPath, gtPath, annoField)
-            ctr += 1
-            print(ctr)
-
-            generateGraphs(results, "eval-maskrcnn3")
-
-
-    """
-    #threshoold
-    annoField = "maskrcnn"
-    ctr = 0
-    for files in os.walk("../data/maskrcnn/rectified"):
-        for filename in files[2]:
-            if "statistics" not in filename:
-                continue
-            datasetPath = files[0] #"/".join(files[0].split("/")[:-1])
-            print(datasetPath, annoField)
-            detectorThreshold = 0.9
-            for i in range(87, 100, 1):
-                detectorThreshold = i/100
-                print("det threshd", detectorThreshold)
-                results += run(datasetPath, tfPath, gtPath, annoField)
-            ctr += 1
-            print(ctr)
-
-            generateGraphs(results, "eval-maskrcnn")
-            break
-    
-
-    """
