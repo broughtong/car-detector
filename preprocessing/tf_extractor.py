@@ -8,6 +8,7 @@ import os
 import rosbag
 import time
 import concurrent
+import multiprocessing
 import tqdm
 from os import devnull
 from sklearn.cluster import DBSCAN
@@ -18,7 +19,7 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-datasetPath = "../data/rosbags_filtered/"
+datasetPath = "../data/rosbags/"
 outputPath = "../data/static_tfs/"
 lp = lg.LaserProjection()
 
@@ -29,11 +30,12 @@ def suppress_stdout_stderr():
             yield (err, out)
 
 class Extractor():
-    def __init__(self, path, folder, filename):
+    def __init__(self, path, folder, filename, queue):
 
         self.path = path
         self.folder = folder
         self.filename = filename
+        self.queue = queue
 
         self.scanTopics = ["sick_back_left", 
                 "sick_back_right", 
@@ -44,18 +46,17 @@ class Extractor():
 
     def run(self):
         
-        print("Process spawned for file %s" % (self.filename), flush = True)
-        time.sleep(1)
+        self.queue.put("%s: Process spawned" % (self.filename))
 
-        print("Reading tfs", flush = True)
+        self.queue.put("%s: Reading tfs" % (self.filename))
         try:
             with suppress_stdout_stderr():
                 fn = os.path.join(self.path, self.folder, self.filename)
                 self.bagtf = BagTfTransformer(fn)
         except:
-            print("Process finished, bag failed for file %s" % (self.filename), flush=True)
+            self.queue.put("%s: Bag Failed (1)" % (self.filename))
+            self.queue.put(1)
             return
-        print("Finished opening bag, reading...")
 
         tfs = {}
         for i in self.scanTopics:
@@ -66,7 +67,8 @@ class Extractor():
                     tftime = self.bagtf.waitForTransform("base_link", i, None)
                     translation, quaternion = self.bagtf.lookupTransform("base_link", i, tftime)
             except:
-                print("Error finding tf here", flush = True)
+                self.queue.put("%s: Error finding tf (2) from %s to %s" % (self.filename, i, "base_link"))
+                self.queue.put(1)
                 return
 
             r = R.from_quat(quaternion)
@@ -87,9 +89,21 @@ class Extractor():
         with open(fn, "wb") as f:
             pickle.dump(tfs, f)
 
-        print("Process finished for file %s" % (self.filename), flush=True)
+        self.queue.put("%s: Process finished sucessfully" % (self.filename))
+        self.queue.put(1)
+
+def listener(q, total):
+    pbar = tqdm.tqdm(total=total)
+    for item in iter(q.get, None):
+        if type(item) == int:
+            pbar.update()
+        else:
+            tqdm.tqdm.write(str(item))
 
 if __name__ == "__main__":
+    
+    manager = multiprocessing.Manager()
+    queue = manager.Queue()
     
     jobs = []
     for files in os.walk(datasetPath):
@@ -97,17 +111,29 @@ if __name__ == "__main__":
             if filename[-4:] == ".bag":
                 path = datasetPath
                 folder = files[0][len(path):]
-                jobs.append(Extractor(path, folder, filename))
+                jobs.append(Extractor(path, folder, filename, queue))
+    
+    listenProcess = multiprocessing.Process(target=listener, args=(queue, len(jobs)))
+    listenProcess.start()
     
     workers = 8
-    print("Starting %i jobs with %i workers" % (len(jobs), workers))
-    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as e:
-        with tqdm.tqdm(total=len(jobs)) as p:
-            fs = []
-            for i in range(len(jobs)):
-                f = e.submit(jobs[i].run)
-                fs.append(f)
-            for f in concurrent.futures.as_completed(fs):
-                p.update()
+    futures = []
+    queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
+        for job in jobs:
+            f = ex.submit(job.run)
+            futures.append(f)
+            time.sleep(1)
 
+        for future in futures:
+            try:
+                res = future.result()
+                if type(res) is int:
+                    res = str(res)
+                if res is not None:
+                    queue.put(res)
+            except Exception as e:
+                queue.put("P Exception: " + str(e))
 
+    queue.put(None)
+    listenProcess.join()

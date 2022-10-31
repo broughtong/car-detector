@@ -19,12 +19,15 @@ import sensor_msgs.point_cloud2 as pc2
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-gtPath = "../data/gt"
 extractEveryFrame = False
-datasetPath = "../data/rosbags_filtered/"
-outputPath = "../data/extracted/"
+gtPath = "../data/gt"
+datasetPath = "../data/rosbags/"
+
+scansPath = "../data/scans"
+pointcloudsPath = "../data/pointclouds"
+dataPath = "../data/meta"
+
 lp = lg.LaserProjection()
-requireThreeD = False
 
 @contextmanager
 def suppress_stdout_stderr():
@@ -42,7 +45,7 @@ class Extractor():
         self.gtbags = gtBags
 
         self.lastX, self.lastY = None, None
-        self.distThresh = 0.05
+        self.distThresh = 2
         self.fileCounter = 0
         self.position = None
         self.scans = []
@@ -55,7 +58,7 @@ class Extractor():
                 self.gtbag = i
         if self.gtbag:
             with open(os.path.join(*self.gtbag[:2], self.gtbag[3]), "rb") as f:
-                self.gtbag = pickle.load(f, encoding="latin1")
+                self.gtbag = pickle.load(f)[0]
 
         self.scanTopics = ["/back_right/sick_safetyscanners/scan", 
                 "/front/sick_safetyscanners/scan",
@@ -72,13 +75,14 @@ class Extractor():
 
     def run(self):
         
-        self.queue.put("Process spawned for file %s" % (os.path.join(self.path, self.folder, self.filename)))
+        self.queue.put("%s: Process Spawned" % (self.filename))
 
+        self.bagtf = BagTfTransformer(os.path.join(self.path, self.folder, self.filename))
         try:
             with suppress_stdout_stderr():
                 self.bagtf = BagTfTransformer(os.path.join(self.path, self.folder, self.filename))
         except:
-            self.queue.put("Process finished, bag failed for file %s (tf)" % (self.filename))
+            self.queue.put("%s: Bag failed (1)" % (self.filename))
             return 0
 
         for topic, msg, t in rosbag.Bag(os.path.join(self.path, self.folder, self.filename)).read_messages():
@@ -97,7 +101,8 @@ class Extractor():
 
         self.saveScans()
         self.queue.put(1)
-        return len(self.scans)
+        if len(self.scans) != 0:
+            self.queue.put("%s: Finished writing %i frames" % (self.filename, len(self.scans)))
 
     def odometryMoved(self):
 
@@ -124,7 +129,7 @@ class Extractor():
         for msg in msgs:
             points[msg.header.frame_id] = []
             if t - msg.header.stamp > rospy.Duration(1, 0):
-                #self.queue.put("Old Scan present", flush = True) #for finding weird rosbags
+                self.queue.put("%s: Old Scan present" % (self.filename))
                 return [], [], []
 
         for idx in range(len(msgs)):
@@ -137,7 +142,7 @@ class Extractor():
                 with suppress_stdout_stderr():
                     translation, quaternion = self.bagtf.lookupTransform("base_link", msgs[idx].header.frame_id, msgs[idx].header.stamp)
             except:
-                self.queue.put("Error finding tf (1) %s" % (self.filename))
+                self.queue.put("%s: Error finding tf (1) from %s to %s" % (self.filename, msgs[idx].header.frame_id, "base_link"))
                 return [], [], []
             r = R.from_quat(quaternion)
             mat = r.as_matrix()
@@ -159,7 +164,7 @@ class Extractor():
             with suppress_stdout_stderr():
                 translation, quaternion = self.bagtf.lookupTransform("odom", "base_link", msgs[0].header.stamp)
         except:
-            self.queue.put("Error finding tf (2) %s" % (self.filename))
+            self.queue.put("%s: Error finding tf (2) from %s to %s" % (self.filename, "base_link", "odom"))
             return [], [], []
         r = R.from_quat(quaternion)
         mat = r.as_matrix()
@@ -195,22 +200,20 @@ class Extractor():
     def saveScans(self):
 
         if len(self.scans) == 0:
-            self.queue.put("Skipping saving empty bag %s" % (self.filename))
+            self.queue.put("%s: Skipping saving empty bag" % (self.filename))
             return
 
-        os.makedirs(os.path.join(outputPath, self.folder), exist_ok=True)
+        os.makedirs(os.path.join(scansPath, self.folder), exist_ok=True)
+        os.makedirs(os.path.join(pointcloudsPath, self.folder), exist_ok=True)
+        os.makedirs(os.path.join(dataPath, self.folder), exist_ok=True)
 
-        fn = os.path.join(outputPath, self.folder, self.filename + ".scans.pickle")
-        #print("Writing %s" % (fn))
+        fn = os.path.join(scansPath, self.folder, self.filename + ".pickle")
         with open(fn, "wb") as f:
             pickle.dump({"scans": self.scans}, f)
-        if requireThreeD:
-            fn = os.path.join(outputPath, self.folder, self.filename + ".3d.pickle")
-            #print("Writing %s" % (fn))
-            with open(fn, "wb") as f:
-                pickle.dump({"pointclouds": self.pointclouds}, f)
-        fn = os.path.join(outputPath, self.folder, self.filename + ".data.pickle")
-        #print("Writing %s" % (fn))
+        fn = os.path.join(pointcloudsPath, self.folder, self.filename + ".pickle")
+        with open(fn, "wb") as f:
+            pickle.dump({"pointclouds": self.pointclouds}, f)
+        fn = os.path.join(dataPath, self.folder, self.filename + ".pickle")
         with open(fn, "wb") as f:
             pickle.dump({"trans": self.trans, "ts": self.ts}, f)
 
@@ -219,17 +222,7 @@ class Extractor():
         t = rospy.Time(t.secs, t.nsecs)
 
         if None in self.topicBuf:
-            #self.queue.put("None in topic buf!")
-            for idx in range(len(self.topicBuf)):
-                if self.topicBuf[idx] is None:
-                    #self.queue.put("Topic missing: ", self.scanTopics[idx])
-                    pass
             return
-
-        if requireThreeD:
-            if self.pointcloudScanBuf is None:
-                self.queue.put("Unable to grab a 3d scan frame from %s" % (self.filename))
-                return
 
         msgs = copy.deepcopy(self.topicBuf)
         msgs.append(msg)
@@ -240,14 +233,13 @@ class Extractor():
                     return
         else:
             tFound = False
-            for frame in self.gtbag[1]:
+            for frame in self.gtbag:
                 gttime = rospy.Time(frame[0].secs, frame[0].nsecs)
                 if gttime == t:
                     tFound = True
                     break
             if tFound == False:
                 return
-        #print("Robot moved!", flush=True)
 
         combined, trans, ts = self.combineScans(msgs, t)
         if len(combined) == 0:
@@ -259,15 +251,15 @@ class Extractor():
         self.trans.append(trans)
         self.ts.append(ts)
 
-        #pcpoints = self.cloudToArray(self.pointcloudScanBuf)
-        #for p in pcpoints:
-        #    self.pointcloudfile.write("%f %f %f, " % (p[0], p[1], p[2]))
-        #self.pointcloudfile.write("\n")
-        if requireThreeD:
+        if self.pointcloudScanBuf is not None:
             self.pointclouds.append(self.cloudToArray(self.pointcloudScanBuf))
+        else:
+            self.pointclouds.append([])
         self.fileCounter += 1
 
-        #self.pointcloudScanBuf = None
+        self.pointcloudScanBuf = None
+        for i in range(len(self.topicBuf)):
+            self.topicBuf[i] = None
 
     def cloudToArray(self, msg):
 
@@ -277,8 +269,8 @@ class Extractor():
             with suppress_stdout_stderr():
                 translation, quaternion = self.bagtf.lookupTransform("base_link", msg.header.frame_id, msg.header.stamp)
         except:
-            self.queue.put("Error finding tf (3) %s" % (self.filename))
-            return [], [], []
+            self.queue.put("%s: Error finding tf (3) from %s to %s" % (self.filename, msg.header.frame_id, "base_link"))
+            return []
 
         r = R.from_quat(quaternion)
         mat = r.as_matrix()
@@ -339,7 +331,7 @@ if __name__ == "__main__":
     listenProcess = multiprocessing.Process(target=listener, args=(queue, len(jobs)))
     listenProcess.start()
 
-    workers = 2
+    workers = 3
     futures = []
     queue.put("Starting %i jobs with %i workers" % (len(jobs), workers))
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
@@ -349,18 +341,19 @@ if __name__ == "__main__":
 
         for future in futures:
             try:
-                queue.put("Bag frames: " + str(future.result()))
-                pass
+                res = future.result()
+                if res is not None:
+                    queue.put(res)
             except Exception as e:
                 queue.put("P Exception: " + str(e))
 
     results = []
     for i, job in enumerate(jobs):
         f = futures[i]
-        value = [job.path, job.folder, job.filename, f.result()]
+        value = [os.path.relpath(job.path, "../data/"), job.folder, job.filename, f.result()]
         results.append(value)
 
-    with open(os.path.join(outputPath, "statistics.pkl"), "wb") as f:
+    with open(os.path.join(dataPath, "statistics.pkl"), "wb") as f:
         pickle.dump(results, f)
     
     queue.put(None)
